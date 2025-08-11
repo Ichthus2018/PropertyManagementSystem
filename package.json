@@ -10,10 +10,29 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@headlessui/react": "^2.2.7",
+    "@heroicons/react": "^2.2.0",
+    "@supabase/supabase-js": "^2.53.0",
     "@tailwindcss/vite": "^4.1.11",
+    "barangay": "^0.1.5",
+    "clsx": "^2.1.1",
+    "country-state-city": "^3.2.1",
+    "country-state-city-js": "^2.5.0",
+    "framer-motion": "^12.23.12",
+    "ph-locations": "^1.1.3",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
-    "tailwindcss": "^4.1.11"
+    "react-hot-toast": "^2.5.2",
+    "react-icons": "^5.5.0",
+    "react-paginate": "^8.3.0",
+    "react-photo-view": "^1.2.7",
+    "react-router-dom": "^7.7.1",
+    "react-spinners": "^0.17.0",
+    "swr": "^2.3.4",
+    "tailwindcss": "^4.1.11",
+    "uuid": "^11.1.0",
+    "world-countries-capitals": "^3.4.0",
+    "zustand": "^5.0.7"
   },
   "devDependencies": {
     "@eslint/js": "^9.30.1",
@@ -24,6 +43,7 @@
     "eslint-plugin-react-hooks": "^5.2.0",
     "eslint-plugin-react-refresh": "^0.4.20",
     "globals": "^16.3.0",
-    "vite": "^7.0.4"
+    "vite": "^7.0.4",
+    "vite-tsconfig-paths": "^5.1.4"
   }
 }
