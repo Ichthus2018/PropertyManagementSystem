@@ -3,14 +3,14 @@ import { useEffect } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import LoginPage from "./pages/Auth/Login";
 // NOTE: These are likely unused now, can be cleaned up later if you wish
-import DashboardPage from "./pages/Admin/DashboardPage";
+
 import AdminUserManagement from "./pages/Admin/AdminUserManagement";
 import { useAuthStore } from "./store/useAuthStore";
 import AppLayout from "./components/layout/AppLayout";
 
 import LoadingSpinner from "./components/ui/LoadingSpinner";
 import WelcomeMessage from "./pages/Admin/WelcomeMessage";
-import Units from "./pages/Admin/units";
+import Units from "./pages/Admin/Units";
 
 // Assuming these paths are correct
 import SettingsGeneral from "./components/Settings/SettingsGeneral";
