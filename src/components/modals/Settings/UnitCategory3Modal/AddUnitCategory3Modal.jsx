@@ -33,9 +33,9 @@ const AddUnitCategory3Modal = ({ isOpen, onClose, onSuccess }) => {
 
     try {
       const { data: existing, error: checkError } = await supabase
-        .from("unit_categories3")
-        .select("unit_category3")
-        .ilike("unit_category3", trimmedName)
+        .from("unit_categories_3")
+        .select("unit_category_3")
+        .ilike("unit_category_3", trimmedName)
         .single();
 
       if (checkError && checkError.code !== "PGRST116") {
@@ -49,8 +49,8 @@ const AddUnitCategory3Modal = ({ isOpen, onClose, onSuccess }) => {
       }
 
       const { data: newUnitCategory, error: insertError } = await supabase
-        .from("unit_categories3")
-        .insert([{ unit_category3: trimmedName, user_id: userProfile.id }])
+        .from("unit_categories_3")
+        .insert([{ unit_category_3: trimmedName, user_id: userProfile.id }])
         .select()
         .single();
 

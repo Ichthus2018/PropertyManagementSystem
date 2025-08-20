@@ -1,3 +1,5 @@
+// src/components/modals/PropertyModal/AddPropertyModal.jsx
+
 import { useState, useEffect, Fragment } from "react";
 import {
   Dialog,
@@ -14,14 +16,16 @@ import ImageUploader from "../../ui/ImageUploader";
 import { v4 as uuidv4 } from "uuid";
 import { ChevronDownIcon } from "@heroicons/react/20/solid";
 import { IoMdClose } from "react-icons/io";
+import Stepper from "../../ui/common/Stepper";
 
 // --- Helper components and functions ---
-const FormInputGroup = ({ label, children }) => (
+const FormInputGroup = ({ label, children, description }) => (
   <div>
     <label className="block mb-1.5 text-sm font-medium text-gray-700">
       {label}
     </label>
     {children}
+    {description && <p className="mt-1 text-xs text-gray-500">{description}</p>}
   </div>
 );
 
@@ -61,12 +65,7 @@ const uploadFiles = async (files, userId) => {
   return uploadedFileData;
 };
 
-// --- Stepper Configuration ---
-const steps = [
-  { id: 1, name: "Property Details" },
-  { id: 2, name: "Location" },
-  { id: 3, name: "Documents" },
-];
+const steps = ["Property Details", "Location", "Documents"];
 
 // --- Main Modal Component ---
 const AddPropertyModal = ({ isOpen, onClose, onSuccess }) => {
@@ -79,7 +78,9 @@ const AddPropertyModal = ({ isOpen, onClose, onSuccess }) => {
   // Form State
   const [propertyName, setPropertyName] = useState("");
   const [numberOfUnits, setNumberOfUnits] = useState("");
-  const [totalSqm, setTotalSqm] = useState("");
+  // --- MODIFIED STATE ---
+  const [overallSqm, setOverallSqm] = useState(""); // Total physical size of property
+  const [totalUnitSqm, setTotalUnitSqm] = useState(""); // Total size of rentable units
   const [street, setStreet] = useState("");
   const [zipCode, setZipCode] = useState("");
 
@@ -104,8 +105,13 @@ const AddPropertyModal = ({ isOpen, onClose, onSuccess }) => {
   const [certificates, setCertificates] = useState([]);
   const [licenseDescription, setLicenseDescription] = useState("");
   const [certificateDescription, setCertificateDescription] = useState("");
-  const progressPercentage = ((currentStep - 1) / (steps.length - 1)) * 100;
-  // --- Effects ---
+
+  // --- DERIVED STATE FOR SQM CALCULATION ---
+  const parsedOverallSqm = parseFloat(overallSqm || 0);
+  const parsedTotalUnitSqm = parseFloat(totalUnitSqm || 0);
+  const unusedSqm = parsedOverallSqm - parsedTotalUnitSqm;
+
+  // --- Effects (no changes here) ---
   useEffect(() => {
     const allCountries = Country.getAllCountries();
     setCountries(allCountries);
@@ -189,7 +195,9 @@ const AddPropertyModal = ({ isOpen, onClose, onSuccess }) => {
   const resetForm = () => {
     setPropertyName("");
     setNumberOfUnits("");
-    setTotalSqm("");
+    // --- MODIFIED ---
+    setOverallSqm("");
+    setTotalUnitSqm("");
     setStreet("");
     setZipCode("");
     setSelectedState("");
@@ -225,6 +233,13 @@ const AddPropertyModal = ({ isOpen, onClose, onSuccess }) => {
     if (currentStep === 1) {
       if (!propertyName.trim()) {
         setStepError("Property Name is a required field.");
+        isValid = false;
+      }
+      // --- NEW VALIDATION ---
+      if (unusedSqm < 0) {
+        setStepError(
+          "Total Unit SQM cannot be greater than the Overall Property SQM."
+        );
         isValid = false;
       }
     }
@@ -275,7 +290,12 @@ const AddPropertyModal = ({ isOpen, onClose, onSuccess }) => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (currentStep !== steps.length) return; // Prevent submission on earlier steps
+    if (currentStep !== steps.length) return;
+
+    if (unusedSqm < 0) {
+      setError("Cannot save: Total Unit SQM exceeds Overall Property SQM.");
+      return;
+    }
 
     if (!userProfile?.id) {
       setError("You must be logged in to add a property.");
@@ -287,6 +307,7 @@ const AddPropertyModal = ({ isOpen, onClose, onSuccess }) => {
     setStepError("");
 
     try {
+      // ... (file upload logic is unchanged)
       const uploadedLicenseFiles = await uploadFiles(
         businessLicenses,
         userProfile.id
@@ -305,16 +326,20 @@ const AddPropertyModal = ({ isOpen, onClose, onSuccess }) => {
       const stateName =
         states.find((s) => s.isoCode === selectedState)?.name || "";
 
+      // --- MODIFIED: Prepare data for Supabase insert ---
       const propertyData = {
         created_by: userProfile.id,
         last_edited_by: userProfile.id,
         property_name: propertyName.trim(),
         number_of_units: numberOfUnits ? parseInt(numberOfUnits, 10) : null,
-        total_sqm: totalSqm ? parseFloat(totalSqm) : null,
+        // The total area for units (used by UnitModal)
+        total_sqm: totalUnitSqm ? parseFloat(totalUnitSqm) : null,
+        // The new field for the overall property size
+        overall_sqm: overallSqm ? parseFloat(overallSqm) : null,
         address_country: selectedCountry?.name,
         address_country_iso: selectedCountry?.isoCode,
         address_street: street.trim(),
-        address_zip_code: zipCode.trim() || null, // Ensure zip code is not an empty string
+        address_zip_code: zipCode.trim() || null,
         ...(selectedCountry?.isoCode === "PH"
           ? {
               address_region: selectedRegion || null,
@@ -349,6 +374,7 @@ const AddPropertyModal = ({ isOpen, onClose, onSuccess }) => {
   return (
     <Transition appear show={isOpen} as={Fragment}>
       <Dialog as="div" className="relative z-50" onClose={handleClose}>
+        {/* ... (Transition and Dialog setup is unchanged) ... */}
         <TransitionChild
           as={Fragment}
           enter="ease-out duration-300"
@@ -372,8 +398,8 @@ const AddPropertyModal = ({ isOpen, onClose, onSuccess }) => {
               leaveTo="opacity-0 scale-95"
             >
               <DialogPanel className="w-full max-w-7xl transform overflow-hidden rounded-2xl bg-white p-6 text-left align-middle shadow-xl transition-all">
+                {/* ... (Dialog Title and close button are unchanged) ... */}
                 <div className="flex items-center justify-between">
-                  {/* Close button with IoMdClose icon */}
                   <DialogTitle
                     as="h3"
                     className="text-2xl font-bold leading-6 text-gray-900"
@@ -393,114 +419,125 @@ const AddPropertyModal = ({ isOpen, onClose, onSuccess }) => {
                   Fill in the details below to register your property.
                 </p>
 
-                {/* --- Stepper --- */}
-                <div className="my-8 flex items-center space-x-3 md:hidden">
-                  <div className="flex-1 rounded-full bg-gray-200 h-3">
-                    <div
-                      className="h-3 rounded-full bg-orange-600" // Using teal to match your image
-                      style={{ width: `${progressPercentage}%` }}
-                    />
-                  </div>
-                  <span className="text-sm font-medium text-gray-800">
-                    {currentStep} / {steps.length}
-                  </span>
-                </div>
-
-                {/* DESKTOP VIEW: Stepper
-        Hidden by default, visible only on 'md' screens and up
-      */}
-                <nav aria-label="Progress" className="my-8 hidden md:block">
-                  <ol
-                    role="list"
-                    className="space-y-4 md:flex md:space-x-8 md:space-y-0"
-                  >
-                    {steps.map((step) => (
-                      <li key={step.name} className="md:flex-1">
-                        {currentStep > step.id ? (
-                          // Completed
-                          <div className="group flex w-full flex-col border-l-4 border-orange-600 py-2 pl-4 md:border-l-0 md:border-t-4 md:pb-0 md:pl-0 md:pt-4">
-                            <span className="text-sm font-medium text-orange-600">
-                              {`Step ${step.id}`}
-                            </span>
-                            <span className="text-sm font-medium">
-                              {step.name}
-                            </span>
-                          </div>
-                        ) : currentStep === step.id ? (
-                          // Current
-                          <div
-                            className="flex flex-col border-l-4 border-orange-600 py-2 pl-4 md:border-l-0 md:border-t-4 md:pb-0 md:pl-0 md:pt-4"
-                            aria-current="step"
-                          >
-                            <span className="text-sm font-medium text-orange-600">
-                              {`Step ${step.id}`}
-                            </span>
-                            <span className="text-sm font-medium">
-                              {step.name}
-                            </span>
-                          </div>
-                        ) : (
-                          // Upcoming
-                          <div className="group flex w-full flex-col border-l-4 border-gray-200 py-2 pl-4 transition-colors md:border-l-0 md:border-t-4 md:pb-0 md:pl-0 md:pt-4">
-                            <span className="text-sm font-medium text-gray-500">
-                              {`Step ${step.id}`}
-                            </span>
-                            <span className="text-sm font-medium">
-                              {step.name}
-                            </span>
-                          </div>
-                        )}
-                      </li>
-                    ))}
-                  </ol>
-                </nav>
+                <Stepper currentStep={currentStep} steps={steps} />
 
                 <form onSubmit={handleSubmit} className="mt-6">
-                  {/* Set a minimum height to prevent jarring layout shifts */}
                   <div className="min-h-[350px]">
-                    {/* --- Step 1: Property Details --- */}
+                    {/* --- Step 1: Property Details (MODIFIED) --- */}
                     {currentStep === 1 && (
                       <div className="space-y-4 animate-fadeIn">
                         <h4 className="text-lg font-semibold text-gray-800 border-b pb-2">
                           Property Details
                         </h4>
-                        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                          <div className="md:col-span-3">
-                            <FormInputGroup label="Property Name*">
-                              <input
-                                type="text"
-                                placeholder="e.g., The Grand Residences"
-                                value={propertyName}
-                                onChange={(e) =>
-                                  setPropertyName(e.target.value)
-                                }
-                                className={inputStyles}
-                                required
-                              />
-                            </FormInputGroup>
-                          </div>
-                          <FormInputGroup label="Number of Units">
+                        <div className="md:col-span-3">
+                          <FormInputGroup label="Property Name*">
                             <input
-                              type="number"
-                              placeholder="e.g., 50"
-                              value={numberOfUnits}
-                              onChange={(e) => setNumberOfUnits(e.target.value)}
+                              type="text"
+                              placeholder="e.g., The Grand Residences"
+                              value={propertyName}
+                              onChange={(e) => setPropertyName(e.target.value)}
                               className={inputStyles}
+                              required
                             />
                           </FormInputGroup>
-                          <FormInputGroup label="Total Square Meters (SQM)">
+                        </div>
+
+                        <div>
+                          <FormInputGroup
+                            label="Overall Property SQM"
+                            description="The total physical size of the property, including common areas like hallways."
+                          >
                             <input
                               type="number"
-                              placeholder="e.g., 1200.50"
-                              value={totalSqm}
-                              onChange={(e) => setTotalSqm(e.target.value)}
+                              step="0.01"
+                              placeholder="e.g., 1500"
+                              value={overallSqm}
+                              onChange={(e) => setOverallSqm(e.target.value)}
                               className={inputStyles}
                             />
                           </FormInputGroup>
                         </div>
+                        <h4 className="text-lg font-semibold text-gray-800 border-b pb-2">
+                          Units Details
+                        </h4>
+                        <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                          <div>
+                            <FormInputGroup label="Number of Units">
+                              <input
+                                type="number"
+                                placeholder="e.g., 50"
+                                value={numberOfUnits}
+                                onChange={(e) =>
+                                  setNumberOfUnits(e.target.value)
+                                }
+                                className={inputStyles}
+                                min="0"
+                              />
+                            </FormInputGroup>
+                          </div>
+
+                          <div>
+                            <FormInputGroup
+                              label="Total Unit SQM"
+                              description="The sum of the area of all rentable units. This will be used for unit allocation."
+                            >
+                              <input
+                                type="number"
+                                step="0.01"
+                                placeholder="e.g., 1200.50"
+                                value={totalUnitSqm}
+                                onChange={(e) =>
+                                  setTotalUnitSqm(e.target.value)
+                                }
+                                className={inputStyles}
+                              />
+                            </FormInputGroup>
+                          </div>
+                        </div>
+
+                        {/* --- NEW: AUTOMATIC CALCULATION DISPLAY --- */}
+                        {overallSqm > 0 && totalUnitSqm > 0 && (
+                          <div
+                            className={`mt-6 p-4 rounded-lg text-sm ${
+                              unusedSqm < 0
+                                ? "bg-red-50 text-red-800 border-red-200"
+                                : "bg-gray-100 text-gray-800 border-gray-200"
+                            } border transition-colors`}
+                          >
+                            <h5 className="font-bold mb-2">Area Calculation</h5>
+                            <div className="space-y-1">
+                              <p>
+                                Overall Property Area:{" "}
+                                <span className="font-semibold">
+                                  {parsedOverallSqm.toLocaleString()} sqm
+                                </span>
+                              </p>
+                              <p>
+                                - Total Unit Area:{" "}
+                                <span className="font-semibold">
+                                  {parsedTotalUnitSqm.toLocaleString()} sqm
+                                </span>
+                              </p>
+                              <hr className="my-1" />
+                              <p
+                                className={`font-bold ${
+                                  unusedSqm < 0 ? "text-red-600" : ""
+                                }`}
+                              >
+                                = Common/Unused Area:{" "}
+                                <span>{unusedSqm.toLocaleString()} sqm</span>
+                              </p>
+                            </div>
+                            {unusedSqm < 0 && (
+                              <p className="mt-2 font-semibold">
+                                Warning: The total unit area cannot be larger
+                                than the overall property area.
+                              </p>
+                            )}
+                          </div>
+                        )}
                       </div>
                     )}
-
                     {/* --- Step 2: Location --- */}
                     {currentStep === 2 && (
                       <div className="space-y-4 animate-fadeIn">

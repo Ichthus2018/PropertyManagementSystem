@@ -1,9 +1,8 @@
-// src/hooks/useSupabaseQuery.js
 import { useState } from "react";
 import useSWR from "swr";
 import supabase from "../lib/supabase";
 
-// The generic fetcher function, now accepts tableName and selectQuery
+// The generic fetcher function
 const fetcher = async ({
   tableName,
   selectQuery,
@@ -44,6 +43,7 @@ export const useSupabaseQuery = ({
   const [searchTerm, setSearchTerm] = useState("");
   const [activeSearchTerm, setActiveSearchTerm] = useState("");
 
+  // SWR key changes ONLY if parameters change
   const swrKey = {
     tableName,
     selectQuery,
@@ -58,7 +58,13 @@ export const useSupabaseQuery = ({
     error,
     isLoading,
     mutate,
-  } = useSWR(swrKey, fetcher, { keepPreviousData: true });
+  } = useSWR(swrKey, fetcher, {
+    keepPreviousData: true, // keep old data while fetching new
+    revalidateOnFocus: false, // don't refetch on tab/window focus
+    revalidateOnReconnect: false, // don't refetch on network reconnect
+    revalidateIfStale: false, // don't refetch even if data is "stale"
+    dedupingInterval: Infinity, // prevents duplicate fetches
+  });
 
   const handleSearch = (e) => {
     e?.preventDefault();
@@ -80,15 +86,15 @@ export const useSupabaseQuery = ({
     totalCount: swrData?.count || 0,
     isLoading,
     error,
-    mutate, // To re-fetch data
+    mutate, // Call manually to refresh
 
-    // Pagination state and handlers
+    // Pagination
     currentPage,
     setCurrentPage,
     pageCount: Math.ceil((swrData?.count || 0) / pageSize),
     pageSize,
 
-    // Search state and handlers
+    // Search
     searchTerm,
     setSearchTerm,
     activeSearchTerm,

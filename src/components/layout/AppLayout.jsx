@@ -126,17 +126,18 @@ export default function AppLayout({ children }) {
         <nav className="flex-grow py-4 px-3 overflow-y-auto">
           <ul className="space-y-2">
             <NavItem
-              to="/units"
-              icon={<FaHotel size={20} />}
-              label="Units"
-              sidebarOpen={sidebarOpen}
-            />
-            <NavItem
               to="/properties"
               icon={<FaHotel size={20} />}
               label="Properties"
               sidebarOpen={sidebarOpen}
             />
+            <NavItem
+              to="/units"
+              icon={<FaHotel size={20} />}
+              label="Units"
+              sidebarOpen={sidebarOpen}
+            />
+
             {isAdmin && (
               <NavItem
                 to="/users"

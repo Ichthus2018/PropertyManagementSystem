@@ -44,14 +44,14 @@ const UnitCategories3 = () => {
     handleSearch,
     clearSearch,
   } = useSupabaseQuery({
-    tableName: "unit_categories3",
+    tableName: "unit_categories_3",
     selectQuery: `
       id,
-      unit_category3,
+      unit_category_3,
       created_at,
       profiles (first_name, last_name)
     `,
-    searchColumn: "unit_category3",
+    searchColumn: "unit_category_3",
     initialPageSize: 5,
   });
 
@@ -107,7 +107,7 @@ const UnitCategories3 = () => {
     setIsProcessing(true);
     try {
       const { error: deleteError } = await supabase
-        .from("unit_categories3")
+        .from("unit_categories_3")
         .delete()
         .eq("id", selectedCategory.id);
 
@@ -162,7 +162,7 @@ const UnitCategories3 = () => {
             return (
               <tr key={category.id}>
                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                  {category.unit_category3}
+                  {category.unit_category_3}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                   {creatorName}
@@ -203,7 +203,7 @@ const UnitCategories3 = () => {
             <div className="flex justify-between items-start">
               <div>
                 <h3 className="text-lg font-medium text-gray-900">
-                  {category.unit_category3}
+                  {category.unit_category_3}
                 </h3>
                 <p className="text-sm text-gray-500 mt-1">
                   Created by: {creatorName}
@@ -375,7 +375,7 @@ const UnitCategories3 = () => {
             onClose={() => setIsDeleteModalOpen(false)}
             onConfirm={handleConfirmDelete}
             isDeleting={isProcessing}
-            itemName={selectedCategory.unit_category3}
+            itemName={selectedCategory.unit_category_3}
           />
         </>
       )}

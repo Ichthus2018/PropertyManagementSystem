@@ -15,7 +15,7 @@ const EditUnitCategory3Modal = ({ isOpen, onClose, onSuccess, category }) => {
 
   useEffect(() => {
     if (category) {
-      setUnitCategory3Name(category.unit_category3);
+      setUnitCategory3Name(category.unit_category_3);
     }
   }, [category]);
 
@@ -38,9 +38,9 @@ const EditUnitCategory3Modal = ({ isOpen, onClose, onSuccess, category }) => {
 
     try {
       const { data: existing, error: checkError } = await supabase
-        .from("unit_categories3")
+        .from("unit_categories_3")
         .select("id")
-        .ilike("unit_category3", trimmedName)
+        .ilike("unit_category_3", trimmedName)
         .neq("id", category.id)
         .single();
 
@@ -55,8 +55,8 @@ const EditUnitCategory3Modal = ({ isOpen, onClose, onSuccess, category }) => {
       }
 
       const { data, error: updateError } = await supabase
-        .from("unit_categories3")
-        .update({ unit_category3: trimmedName })
+        .from("unit_categories_3")
+        .update({ unit_category_3: trimmedName })
         .eq("id", category.id)
         .select()
         .single();
