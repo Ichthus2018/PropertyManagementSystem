@@ -1,4 +1,4 @@
-import { Fragment, useState } from "react";
+import { Fragment, useState, Suspense, lazy } from "react";
 import {
   Listbox,
   ListboxButton,
@@ -7,13 +7,17 @@ import {
 } from "@headlessui/react";
 import { CheckIcon, ChevronUpDownIcon } from "@heroicons/react/20/solid";
 import clsx from "clsx";
-import UnitTypes from "./propertyDataTabs/UnitTypes";
-import LeasingTypes from "./propertyDataTabs/LeasingTypes";
-import UnitCategories from "./propertyDataTabs/UnitCategories";
-import UnitCategories2 from "./propertyDataTabs/UnitCategories2";
-import UnitCategories3 from "./propertyDataTabs/UnitCategories3";
 
-// Mock components for demonstration - no changes here
+// Lazy load the tab components
+const UnitTypes = lazy(() => import("./propertyDataTabs/UnitTypes"));
+const LeasingTypes = lazy(() => import("./propertyDataTabs/LeasingTypes"));
+const UnitCategories = lazy(() => import("./propertyDataTabs/UnitCategories"));
+const UnitCategories2 = lazy(() =>
+  import("./propertyDataTabs/UnitCategories2")
+);
+const UnitCategories3 = lazy(() =>
+  import("./propertyDataTabs/UnitCategories3")
+);
 
 // Tab configuration - no changes here
 const tabs = [
@@ -23,6 +27,16 @@ const tabs = [
   { name: "Unit Categories 2", component: <UnitCategories2 /> },
   { name: "Unit Categories 3", component: <UnitCategories3 /> },
 ];
+
+// Loading fallback component
+const TabContentFallback = () => (
+  <div className="flex items-center justify-center h-64">
+    <div className="text-center">
+      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-500 mx-auto"></div>
+      <p className="mt-4 text-gray-600">Loading content...</p>
+    </div>
+  </div>
+);
 
 export default function SettingsPropertyData() {
   // --- CHANGE 1: State now holds the entire tab object ---
@@ -88,7 +102,6 @@ export default function SettingsPropertyData() {
                 />
               </span>
             </ListboxButton>
-
             <ListboxOptions className="absolute z-50 mt-1 max-h-60 w-full overflow-auto rounded-md bg-white py-1 text-base shadow-lg ring-1 ring-black/5 focus:outline-none sm:text-sm">
               {tabs.map((tab) => (
                 <ListboxOption
@@ -125,9 +138,11 @@ export default function SettingsPropertyData() {
         </Listbox>
       </div>
 
-      {/* --- CHANGE 4: Content area now uses the selectedTab object --- */}
+      {/* --- CHANGE 4: Content area now uses the selectedTab object with Suspense for lazy loading --- */}
       <div className="flex-1 py-8">
-        <div className="">{selectedTab.component}</div>
+        <Suspense fallback={<TabContentFallback />}>
+          {selectedTab.component}
+        </Suspense>
       </div>
     </div>
   );

@@ -8,15 +8,102 @@ import {
 } from "@headlessui/react";
 import supabase from "../../../lib/supabase";
 import { useAuthStore } from "../../../store/useAuthStore";
-// OPTIMIZED: Removed static imports for country-state-city and barangay
-// import { Country, State } from "country-state-city";
-// import barangay from "barangay";
 import ImageUploader from "../../ui/ImageUploader";
 import { v4 as uuidv4 } from "uuid";
 import { ChevronDownIcon } from "@heroicons/react/20/solid";
 import { IoMdClose } from "react-icons/io";
 import Stepper from "../../ui/common/Stepper";
-// --- Helper components and functions (Consistent with AddPropertyModal) ---
+import axios from "axios";
+
+// --- New Philippine Address API Functions ---
+const fetchAddressData = (jsonPathName) =>
+  axios.get(
+    `https://isaacdarcilla.github.io/philippine-addresses/${jsonPathName}.json`
+  );
+
+/**
+ * @returns all regions
+ */
+const getRegions = async () => {
+  try {
+    const response = await fetchAddressData("region");
+    return response.data.map((region) => ({
+      id: region.id,
+      psgc_code: region.psgc_code,
+      region_name: region.region_name,
+      region_code: region.region_code,
+    }));
+  } catch (e) {
+    console.error("Error fetching regions:", e.message);
+    throw e;
+  }
+};
+
+/**
+ * @param {string} regionCode
+ * @returns all provinces based on region code parameter.
+ */
+const getProvinces = async (regionCode) => {
+  try {
+    const response = await fetchAddressData("province");
+    return response.data
+      .filter((province) => province.region_code === regionCode)
+      .map((filtered) => ({
+        psgc_code: filtered.psgc_code,
+        province_name: filtered.province_name,
+        province_code: filtered.province_code,
+        region_code: filtered.region_code,
+      }));
+  } catch (e) {
+    console.error("Error fetching provinces:", e.message);
+    throw e;
+  }
+};
+
+/**
+ * @param {string} provinceCode
+ * @returns all cities based on province code parameter.
+ */
+const getCities = async (provinceCode) => {
+  try {
+    const response = await fetchAddressData("city");
+    return response.data
+      .filter((city) => city.province_code === provinceCode)
+      .map((filtered) => ({
+        city_name: filtered.city_name,
+        city_code: filtered.city_code,
+        province_code: filtered.province_code,
+        region_desc: filtered.region_desc,
+      }));
+  } catch (e) {
+    console.error("Error fetching cities:", e.message);
+    throw e;
+  }
+};
+
+/**
+ * @param {string} cityCode
+ * @returns all barangays based on city code parameter.
+ */
+const getBarangays = async (cityCode) => {
+  try {
+    const response = await fetchAddressData("barangay");
+    return response.data
+      .filter((barangay) => barangay.city_code === cityCode)
+      .map((filtered) => ({
+        brgy_name: filtered.brgy_name,
+        brgy_code: filtered.brgy_code,
+        province_code: filtered.province_code,
+        region_code: filtered.region_code,
+      }));
+  } catch (e) {
+    console.error("Error fetching barangays:", e.message);
+    throw e;
+  }
+};
+// --- End of New Address Functions ---
+
+// --- Helper components and functions ---
 const FormInputGroup = ({ label, children, description }) => (
   <div>
     <label className="block mb-1.5 text-sm font-medium text-gray-700">
@@ -26,18 +113,17 @@ const FormInputGroup = ({ label, children, description }) => (
     {description && <p className="mt-1 text-xs text-gray-500">{description}</p>}
   </div>
 );
+
 const inputStyles =
   "block w-full text-sm rounded-lg border-gray-300 bg-gray-50 p-2.5 text-gray-900 focus:border-orange-500 focus:ring-orange-500 disabled:cursor-not-allowed disabled:opacity-60";
 const selectStyles = `${inputStyles} appearance-none`;
 
-// --- MISSING HELPER FUNCTION FROM COMPONENT 1 ---
 const changeFileExtension = (filename, newExtension) => {
   const lastDot = filename.lastIndexOf(".");
   const baseName = lastDot === -1 ? filename : filename.substring(0, lastDot);
   return `${baseName}.${newExtension}`;
 };
 
-// --- MISSING IMAGE CONVERSION FUNCTION FROM COMPONENT 1 ---
 const convertImageToAvif = (file, options = { quality: 0.8 }) => {
   return new Promise((resolve) => {
     const canvas = document.createElement("canvas");
@@ -94,7 +180,6 @@ const convertImageToAvif = (file, options = { quality: 0.8 }) => {
   });
 };
 
-// --- UPDATED UPLOAD FILES FUNCTION WITH IMAGE CONVERSION ---
 const uploadFiles = async (files, userId) => {
   if (!userId) {
     throw new Error("User ID is required for uploading files.");
@@ -103,7 +188,6 @@ const uploadFiles = async (files, userId) => {
   for (const item of files) {
     if (item.source === "new" && item.file) {
       let fileToUpload = item.file;
-      // Check if the file is an image and convert it to AVIF if possible
       if (item.file.type.startsWith("image/")) {
         try {
           fileToUpload = await convertImageToAvif(item.file);
@@ -115,11 +199,10 @@ const uploadFiles = async (files, userId) => {
           fileToUpload = item.file; // Ensure fallback on error
         }
       }
-      // The filePath uses the name of the file being uploaded (which might now be .avif)
       const filePath = `user_${userId}/${uuidv4()}-${fileToUpload.name}`;
       const { error: uploadError } = await supabase.storage
         .from("property-documents")
-        .upload(filePath, fileToUpload); // Use the (potentially converted) file
+        .upload(filePath, fileToUpload);
       if (uploadError) {
         console.error("Supabase upload error:", uploadError);
         throw new Error(`Failed to upload ${fileToUpload.name}.`);
@@ -137,6 +220,7 @@ const uploadFiles = async (files, userId) => {
 };
 
 const steps = ["Property Details", "Location", "Documents"];
+
 // --- Main Modal Component ---
 const EditPropertyModal = ({ isOpen, onClose, onSuccess, property }) => {
   const [currentStep, setCurrentStep] = useState(1);
@@ -144,6 +228,7 @@ const EditPropertyModal = ({ isOpen, onClose, onSuccess, property }) => {
   const [error, setError] = useState("");
   const [stepError, setStepError] = useState("");
   const userProfile = useAuthStore((state) => state.userProfile);
+
   // Form State
   const [propertyName, setPropertyName] = useState("");
   const [numberOfUnits, setNumberOfUnits] = useState("");
@@ -151,72 +236,180 @@ const EditPropertyModal = ({ isOpen, onClose, onSuccess, property }) => {
   const [totalUnitSqm, setTotalUnitSqm] = useState("");
   const [street, setStreet] = useState("");
   const [zipCode, setZipCode] = useState("");
-  // Location State
-  const [countries, setCountries] = useState([]);
-  const [states, setStates] = useState([]);
-  const [selectedCountry, setSelectedCountry] = useState(null);
-  const [selectedState, setSelectedState] = useState("");
+
+  // Location State (Philippines Only) - Stores arrays of objects
   const [phRegionsList, setPhRegionsList] = useState([]);
   const [phProvincesList, setPhProvincesList] = useState([]);
   const [phCitiesList, setPhCitiesList] = useState([]);
   const [phBarangaysList, setPhBarangaysList] = useState([]);
-  const [selectedRegion, setSelectedRegion] = useState("");
-  const [selectedProvince, setSelectedProvince] = useState("");
-  const [selectedCity, setSelectedCity] = useState("");
-  const [selectedBarangay, setSelectedBarangay] = useState("");
+
+  // Location State - Stores the selected CODE for each level
+  const [selectedRegionCode, setSelectedRegionCode] = useState("");
+  const [selectedProvinceCode, setSelectedProvinceCode] = useState("");
+  const [selectedCityCode, setSelectedCityCode] = useState("");
+  const [selectedBarangayCode, setSelectedBarangayCode] = useState("");
+
   // Document State
   const [businessLicenses, setBusinessLicenses] = useState([]);
   const [certificates, setCertificates] = useState([]);
   const [licenseDescription, setLicenseDescription] = useState("");
   const [certificateDescription, setCertificateDescription] = useState("");
   const [filesToDelete, setFilesToDelete] = useState([]);
+
   // --- DERIVED STATE FOR SQM CALCULATION ---
   const parsedOverallSqm = parseFloat(overallSqm || 0);
   const parsedTotalUnitSqm = parseFloat(totalUnitSqm || 0);
   const unusedSqm = parsedOverallSqm - parsedTotalUnitSqm;
-  // OPTIMIZED: Effect to populate form when property data is available and modal opens.
-  // This now dynamically loads all necessary location data at once.
+
+  // --- Effects for fetching address data ---
+  // Fetch Regions on component mount
+  useEffect(() => {
+    const loadInitialPhRegions = async () => {
+      try {
+        const regionsData = await getRegions();
+        setPhRegionsList(regionsData);
+      } catch (e) {
+        console.error("Failed to load Philippine regions:", e);
+        setPhRegionsList([]);
+      }
+    };
+    loadInitialPhRegions();
+  }, []);
+
+  // Fetch Provinces when a Region is selected
+  useEffect(() => {
+    // FIX: Clear province list and reset selections immediately when region changes.
+    setPhProvincesList([]);
+    setSelectedProvinceCode("");
+    const loadProvinces = async () => {
+      if (selectedRegionCode) {
+        try {
+          const provincesData = await getProvinces(selectedRegionCode);
+          setPhProvincesList(provincesData);
+        } catch (e) {
+          console.error(
+            `Failed to load provinces for ${selectedRegionCode}:`,
+            e
+          );
+          setPhProvincesList([]);
+        }
+      }
+    };
+    loadProvinces();
+  }, [selectedRegionCode]);
+
+  // Fetch Cities when a Province is selected
+  useEffect(() => {
+    // FIX: Clear city list and reset selections immediately when province changes.
+    setPhCitiesList([]);
+    setSelectedCityCode("");
+    const loadCities = async () => {
+      if (selectedProvinceCode) {
+        try {
+          const citiesData = await getCities(selectedProvinceCode);
+          setPhCitiesList(citiesData);
+        } catch (e) {
+          console.error(
+            `Failed to load cities for ${selectedProvinceCode}:`,
+            e
+          );
+          setPhCitiesList([]);
+        }
+      }
+    };
+    loadCities();
+  }, [selectedProvinceCode]);
+
+  // Fetch Barangays when a City is selected
+  useEffect(() => {
+    // FIX: Clear barangay list and reset selection immediately when city changes.
+    setPhBarangaysList([]);
+    setSelectedBarangayCode("");
+    const loadBarangays = async () => {
+      if (selectedCityCode) {
+        try {
+          const barangaysData = await getBarangays(selectedCityCode);
+          setPhBarangaysList(barangaysData);
+        } catch (e) {
+          console.error(`Failed to load barangays for ${selectedCityCode}:`, e);
+          setPhBarangaysList([]);
+        }
+      }
+    };
+    loadBarangays();
+  }, [selectedCityCode]);
+
+  // Effect to populate form when property data is available and modal opens.
   useEffect(() => {
     const populateForm = async () => {
       if (!property) return;
+
       // Step 1 Fields
       setPropertyName(property.property_name || "");
       setNumberOfUnits(property.number_of_units || "");
       setOverallSqm(property.overall_sqm || "");
       setTotalUnitSqm(property.total_sqm || "");
+
       // Step 2 Fields
       setStreet(property.address_street || "");
       setZipCode(property.address_zip_code || "");
-      // Dynamically load libraries
-      const { Country, State } = await import("country-state-city");
-      // Populate country list and set selected country
-      const allCountries = Country.getAllCountries();
-      setCountries(allCountries);
-      const initialCountry =
-        allCountries.find((c) => c.isoCode === property.address_country_iso) ||
-        null;
-      setSelectedCountry(initialCountry);
-      // Populate location dropdowns based on property's country
-      if (property.address_country_iso === "PH") {
-        const { default: barangay } = await import("barangay");
-        const region = property.address_region || "";
-        const province = property.address_province || "";
-        const city = property.address_city_municipality || "";
-        // Load all dropdown lists based on existing data
-        setPhRegionsList(barangay());
-        if (region) setPhProvincesList(barangay(region));
-        if (region && province) setPhCitiesList(barangay(region, province));
-        if (region && province && city)
-          setPhBarangaysList(barangay(region, province, city));
-        // Set selected values
-        setSelectedRegion(region);
-        setSelectedProvince(province);
-        setSelectedCity(city);
-        setSelectedBarangay(property.address_barangay || "");
-      } else if (initialCountry) {
-        setStates(State.getStatesOfCountry(initialCountry.isoCode));
-        setSelectedState(property.address_state_iso || "");
+
+      // Load regions first
+      try {
+        const regionsData = await getRegions();
+        setPhRegionsList(regionsData);
+
+        // Find the region code from the property data
+        const regionName = property.address_region;
+        const region = regionsData.find((r) => r.region_name === regionName);
+
+        if (region) {
+          setSelectedRegionCode(region.region_code);
+
+          // Load provinces for this region
+          const provincesData = await getProvinces(region.region_code);
+          setPhProvincesList(provincesData);
+
+          // Find the province code from the property data
+          const provinceName = property.address_province;
+          const province = provincesData.find(
+            (p) => p.province_name === provinceName
+          );
+
+          if (province) {
+            setSelectedProvinceCode(province.province_code);
+
+            // Load cities for this province
+            const citiesData = await getCities(province.province_code);
+            setPhCitiesList(citiesData);
+
+            // Find the city code from the property data
+            const cityName = property.address_city_municipality;
+            const city = citiesData.find((c) => c.city_name === cityName);
+
+            if (city) {
+              setSelectedCityCode(city.city_code);
+
+              // Load barangays for this city
+              const barangaysData = await getBarangays(city.city_code);
+              setPhBarangaysList(barangaysData);
+
+              // Find the barangay code from the property data
+              const barangayName = property.address_barangay;
+              const barangay = barangaysData.find(
+                (b) => b.brgy_name === barangayName
+              );
+
+              if (barangay) {
+                setSelectedBarangayCode(barangay.brgy_code);
+              }
+            }
+          }
+        }
+      } catch (e) {
+        console.error("Failed to populate address data:", e);
       }
+
       // Step 3 Fields
       const mapExistingFiles = (doc) => {
         if (!doc || !Array.isArray(doc.files)) return [];
@@ -227,92 +420,35 @@ const EditPropertyModal = ({ isOpen, onClose, onSuccess, property }) => {
           source: "existing",
         }));
       };
+
       setBusinessLicenses(mapExistingFiles(property.business_licenses));
       setCertificates(mapExistingFiles(property.certificates_of_registration));
       setLicenseDescription(property.business_licenses?.description || "");
       setCertificateDescription(
         property.certificates_of_registration?.description || ""
       );
+
       // Reset internal state
       setFilesToDelete([]);
       setError("");
       setStepError("");
       setCurrentStep(1);
     };
+
     if (isOpen) {
       populateForm();
     }
   }, [property, isOpen]);
-  // OPTIMIZED: Location-based useEffects now only load data.
-  // State clearing is handled by user interaction in `onChange` handlers to prevent race conditions.
-  useEffect(() => {
-    const loadStates = async () => {
-      if (selectedCountry && selectedCountry.isoCode !== "PH") {
-        const { State } = await import("country-state-city");
-        setStates(State.getStatesOfCountry(selectedCountry.isoCode));
-      } else {
-        setStates([]);
-      }
-    };
-    if (isOpen) loadStates();
-  }, [selectedCountry, isOpen]);
-  useEffect(() => {
-    const loadProvinces = async () => {
-      if (selectedRegion) {
-        try {
-          const { default: barangay } = await import("barangay");
-          setPhProvincesList(barangay(selectedRegion));
-        } catch (e) {
-          console.error(`Failed to load provinces for ${selectedRegion}:`, e);
-          setPhProvincesList([]);
-        }
-      } else {
-        setPhProvincesList([]);
-      }
-    };
-    if (isOpen) loadProvinces();
-  }, [selectedRegion, isOpen]);
-  useEffect(() => {
-    const loadCities = async () => {
-      if (selectedRegion && selectedProvince) {
-        try {
-          const { default: barangay } = await import("barangay");
-          setPhCitiesList(barangay(selectedRegion, selectedProvince));
-        } catch (e) {
-          console.error(`Failed to load cities for ${selectedProvince}:`, e);
-          setPhCitiesList([]);
-        }
-      } else {
-        setPhCitiesList([]);
-      }
-    };
-    if (isOpen) loadCities();
-  }, [selectedRegion, selectedProvince, isOpen]);
-  useEffect(() => {
-    const loadBarangays = async () => {
-      if (selectedRegion && selectedProvince && selectedCity) {
-        try {
-          const { default: barangay } = await import("barangay");
-          setPhBarangaysList(
-            barangay(selectedRegion, selectedProvince, selectedCity)
-          );
-        } catch (e) {
-          console.error(`Failed to load barangays for ${selectedCity}:`, e);
-          setPhBarangaysList([]);
-        }
-      } else {
-        setPhBarangaysList([]);
-      }
-    };
-    if (isOpen) loadBarangays();
-  }, [selectedRegion, selectedProvince, selectedCity, isOpen]);
+
   // --- Form Handlers ---
   const handleClose = () => {
     onClose();
   };
+
   const handleNext = () => {
     setStepError("");
     let isValid = true;
+
     if (currentStep === 1) {
       if (!propertyName.trim()) {
         setStepError("Property Name is a required field.");
@@ -325,47 +461,37 @@ const EditPropertyModal = ({ isOpen, onClose, onSuccess, property }) => {
         isValid = false;
       }
     }
+
     if (currentStep === 2) {
-      if (!selectedCountry) {
-        setStepError("Country is a required field.");
+      if (!selectedRegionCode) {
+        setStepError("Region is a required field.");
         isValid = false;
-      } else if (selectedCountry.isoCode === "PH") {
-        if (!selectedRegion) {
-          setStepError("Region is required for properties in the Philippines.");
-          isValid = false;
-        } else if (!selectedProvince) {
-          setStepError(
-            "Province is required for properties in the Philippines."
-          );
-          isValid = false;
-        } else if (!selectedCity) {
-          setStepError(
-            "City / Municipality is required for properties in the Philippines."
-          );
-          isValid = false;
-        } else if (!selectedBarangay) {
-          setStepError(
-            "Barangay is required for properties in the Philippines."
-          );
-          isValid = false;
-        }
-      } else if (states.length > 0 && !selectedState) {
-        setStepError("State / Province is required.");
+      } else if (!selectedProvinceCode) {
+        setStepError("Province is a required field.");
+        isValid = false;
+      } else if (!selectedCityCode) {
+        setStepError("City / Municipality is a required field.");
+        isValid = false;
+      } else if (!selectedBarangayCode) {
+        setStepError("Barangay is a required field.");
         isValid = false;
       }
     }
+
     if (isValid) {
       if (currentStep < steps.length) {
         setCurrentStep(currentStep + 1);
       }
     }
   };
+
   const handleBack = () => {
     setStepError("");
     if (currentStep > 1) {
       setCurrentStep(currentStep - 1);
     }
   };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (currentStep !== steps.length) return;
@@ -377,9 +503,11 @@ const EditPropertyModal = ({ isOpen, onClose, onSuccess, property }) => {
       setError("Cannot update property. Missing required data.");
       return;
     }
+
     setIsSubmitting(true);
     setError("");
     setStepError("");
+
     try {
       if (filesToDelete.length > 0) {
         const { error: deleteError } = await supabase.storage
@@ -389,11 +517,13 @@ const EditPropertyModal = ({ isOpen, onClose, onSuccess, property }) => {
           console.error("Error deleting old files:", deleteError);
         }
       }
+
       const uploadedLicenseFiles = await uploadFiles(
         businessLicenses,
         userProfile.id
       );
       const uploadedCertFiles = await uploadFiles(certificates, userProfile.id);
+
       const finalLicenses = [
         ...businessLicenses
           .filter((f) => f.source === "existing")
@@ -406,6 +536,7 @@ const EditPropertyModal = ({ isOpen, onClose, onSuccess, property }) => {
           .map(({ url, path }) => ({ url, path })),
         ...uploadedCertFiles,
       ];
+
       const licenseData = {
         files: finalLicenses,
         description: licenseDescription.trim(),
@@ -414,43 +545,48 @@ const EditPropertyModal = ({ isOpen, onClose, onSuccess, property }) => {
         files: finalCerts,
         description: certificateDescription.trim(),
       };
-      const stateName =
-        states.find((s) => s.isoCode === selectedState)?.name || "";
+
+      // Find the selected names from the lists using the stored codes
+      const selectedRegionName = phRegionsList.find(
+        (r) => r.region_code === selectedRegionCode
+      )?.region_name;
+      const selectedProvinceName = phProvincesList.find(
+        (p) => p.province_code === selectedProvinceCode
+      )?.province_name;
+      const selectedCityName = phCitiesList.find(
+        (c) => c.city_code === selectedCityCode
+      )?.city_name;
+      const selectedBarangayName = phBarangaysList.find(
+        (b) => b.brgy_code === selectedBarangayCode
+      )?.brgy_name;
+
       const propertyUpdateData = {
         last_edited_by: userProfile.id,
         property_name: propertyName.trim(),
         number_of_units: numberOfUnits ? parseInt(numberOfUnits, 10) : null,
         total_sqm: totalUnitSqm ? parseFloat(totalUnitSqm) : null,
         overall_sqm: overallSqm ? parseFloat(overallSqm) : null,
-        address_country: selectedCountry?.name,
-        address_country_iso: selectedCountry?.isoCode,
+        address_country: "Philippines",
+        address_country_iso: "PH",
         address_street: street.trim(),
         address_zip_code: zipCode.trim() || null,
-        ...(selectedCountry?.isoCode === "PH"
-          ? {
-              address_region: selectedRegion || null,
-              address_province: selectedProvince || null,
-              address_city_municipality: selectedCity || null,
-              address_barangay: selectedBarangay || null,
-              address_state: null,
-              address_state_iso: null,
-            }
-          : {
-              address_state: stateName,
-              address_state_iso: selectedState || null,
-              address_region: null,
-              address_province: null,
-              address_city_municipality: null,
-              address_barangay: null,
-            }),
+        address_region: selectedRegionName || null,
+        address_province: selectedProvinceName || null,
+        address_city_municipality: selectedCityName || null,
+        address_barangay: selectedBarangayName || null,
+        address_state: null, // Clear out non-PH fields
+        address_state_iso: null, // Clear out non-PH fields
         business_licenses: licenseData,
         certificates_of_registration: certificateData,
       };
+
       const { error: updateError } = await supabase
         .from("properties")
         .update(propertyUpdateData)
         .eq("id", property.id);
+
       if (updateError) throw updateError;
+
       onSuccess();
       handleClose();
     } catch (err) {
@@ -460,6 +596,7 @@ const EditPropertyModal = ({ isOpen, onClose, onSuccess, property }) => {
       setIsSubmitting(false);
     }
   };
+
   const createSetFilesWithDeletion = (filesState, setFilesState) => {
     return (newFiles) => {
       const currentFileIds = new Set(newFiles.map((f) => f.id));
@@ -468,11 +605,24 @@ const EditPropertyModal = ({ isOpen, onClose, onSuccess, property }) => {
         .filter((f) => f.source === "existing")
         .map((f) => f.path);
       if (existingFilesToRemove.length > 0) {
-        setFilesToDelete((prev) => [...prev, ...existingFilesToRemove]);
+        setFilesToDelete((prev) => [
+          ...new Set([...prev, ...existingFilesToRemove]),
+        ]);
       }
       setFilesState(newFiles);
     };
   };
+
+  // Create wrapped state setters for ImageUploaders
+  const setBusinessLicensesWithDeletion = createSetFilesWithDeletion(
+    businessLicenses,
+    setBusinessLicenses
+  );
+  const setCertificatesWithDeletion = createSetFilesWithDeletion(
+    certificates,
+    setCertificates
+  );
+
   return (
     <Transition appear show={isOpen} as={Fragment}>
       <Dialog as="div" className="relative z-50" onClose={handleClose}>
@@ -522,10 +672,8 @@ const EditPropertyModal = ({ isOpen, onClose, onSuccess, property }) => {
                 <Stepper currentStep={currentStep} steps={steps} />
                 <form onSubmit={handleSubmit} className="mt-6">
                   <div className="min-h-[350px]">
-                    {/* Step 1 & 3 are unchanged */}
                     {currentStep === 1 && (
                       <div className="space-y-4 animate-fadeIn">
-                        {/* ... (Step 1 JSX remains identical) ... */}
                         <h4 className="text-lg font-semibold text-gray-800 border-b pb-2">
                           Property Details
                         </h4>
@@ -634,173 +782,127 @@ const EditPropertyModal = ({ isOpen, onClose, onSuccess, property }) => {
                         )}
                       </div>
                     )}
-                    {/* --- Step 2: Location (OPTIMIZED)--- */}
+                    {/* --- Step 2: Location (Philippines Only)--- */}
                     {currentStep === 2 && (
                       <div className="space-y-4 animate-fadeIn">
                         <h4 className="text-lg font-semibold text-gray-800 border-b pb-2">
                           Location
                         </h4>
                         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                          <div className="md:col-span-2 relative">
+                          <div className="md:col-span-2">
                             <FormInputGroup label="Country*">
+                              <input
+                                type="text"
+                                value="Philippines"
+                                className={inputStyles}
+                                disabled
+                                readOnly
+                              />
+                            </FormInputGroup>
+                          </div>
+                          <div className="relative">
+                            <FormInputGroup label="Region*">
                               <select
-                                value={selectedCountry?.isoCode || ""}
-                                // OPTIMIZED: onChange handler to dynamically load lib and clear children states
-                                onChange={async (e) => {
-                                  const { Country } = await import(
-                                    "country-state-city"
-                                  );
-                                  setSelectedCountry(
-                                    Country.getCountryByCode(e.target.value)
-                                  );
-                                  setSelectedState("");
-                                  setSelectedRegion("");
-                                  setSelectedProvince("");
-                                  setSelectedCity("");
-                                  setSelectedBarangay("");
-                                }}
+                                value={selectedRegionCode}
+                                onChange={(e) =>
+                                  setSelectedRegionCode(e.target.value)
+                                }
                                 className={selectStyles}
                                 required
                               >
-                                {countries.map((c) => (
-                                  <option key={c.isoCode} value={c.isoCode}>
-                                    {c.name}
+                                <option value="" disabled>
+                                  Select a region...
+                                </option>
+                                {phRegionsList.map((region) => (
+                                  <option
+                                    key={region.region_code}
+                                    value={region.region_code}
+                                  >
+                                    {region.region_name}
                                   </option>
                                 ))}
                               </select>
                               <ChevronDownIcon className="pointer-events-none absolute right-3 top-[42px] h-5 w-5 text-gray-400" />
                             </FormInputGroup>
                           </div>
-                          {selectedCountry?.isoCode === "PH" && (
-                            <>
-                              <div className="relative">
-                                <FormInputGroup label="Region*">
-                                  <select
-                                    value={selectedRegion}
-                                    // OPTIMIZED: onChange handler to clear children states
-                                    onChange={(e) => {
-                                      setSelectedRegion(e.target.value);
-                                      setSelectedProvince("");
-                                      setSelectedCity("");
-                                      setSelectedBarangay("");
-                                    }}
-                                    className={selectStyles}
-                                    required
+                          <div className="relative">
+                            <FormInputGroup label="Province*">
+                              <select
+                                value={selectedProvinceCode}
+                                onChange={(e) =>
+                                  setSelectedProvinceCode(e.target.value)
+                                }
+                                className={selectStyles}
+                                disabled={!selectedRegionCode}
+                                required
+                              >
+                                <option value="" disabled>
+                                  Select a province...
+                                </option>
+                                {phProvincesList.map((province) => (
+                                  <option
+                                    key={province.province_code}
+                                    value={province.province_code}
                                   >
-                                    <option value="" disabled>
-                                      Select a region...
-                                    </option>
-                                    {phRegionsList.map((name) => (
-                                      <option key={name} value={name}>
-                                        {name}
-                                      </option>
-                                    ))}
-                                  </select>
-                                  <ChevronDownIcon className="pointer-events-none absolute right-3 top-[42px] h-5 w-5 text-gray-400" />
-                                </FormInputGroup>
-                              </div>
-                              <div className="relative">
-                                <FormInputGroup label="Province*">
-                                  <select
-                                    value={selectedProvince}
-                                    // OPTIMIZED: onChange handler to clear children states
-                                    onChange={(e) => {
-                                      setSelectedProvince(e.target.value);
-                                      setSelectedCity("");
-                                      setSelectedBarangay("");
-                                    }}
-                                    className={selectStyles}
-                                    disabled={!selectedRegion}
-                                    required
+                                    {province.province_name}
+                                  </option>
+                                ))}
+                              </select>
+                              <ChevronDownIcon className="pointer-events-none absolute right-3 top-[42px] h-5 w-5 text-gray-400" />
+                            </FormInputGroup>
+                          </div>
+                          <div className="relative">
+                            <FormInputGroup label="City / Municipality*">
+                              <select
+                                value={selectedCityCode}
+                                onChange={(e) =>
+                                  setSelectedCityCode(e.target.value)
+                                }
+                                className={selectStyles}
+                                disabled={!selectedProvinceCode}
+                                required
+                              >
+                                <option value="" disabled>
+                                  Select a city/municipality...
+                                </option>
+                                {phCitiesList.map((city) => (
+                                  <option
+                                    key={city.city_code}
+                                    value={city.city_code}
                                   >
-                                    <option value="" disabled>
-                                      Select a province...
-                                    </option>
-                                    {phProvincesList.map((name) => (
-                                      <option key={name} value={name}>
-                                        {name}
-                                      </option>
-                                    ))}
-                                  </select>
-                                  <ChevronDownIcon className="pointer-events-none absolute right-3 top-[42px] h-5 w-5 text-gray-400" />
-                                </FormInputGroup>
-                              </div>
-                              <div className="relative">
-                                <FormInputGroup label="City / Municipality*">
-                                  <select
-                                    value={selectedCity}
-                                    // OPTIMIZED: onChange handler to clear children states
-                                    onChange={(e) => {
-                                      setSelectedCity(e.target.value);
-                                      setSelectedBarangay("");
-                                    }}
-                                    className={selectStyles}
-                                    disabled={!selectedProvince}
-                                    required
+                                    {city.city_name}
+                                  </option>
+                                ))}
+                              </select>
+                              <ChevronDownIcon className="pointer-events-none absolute right-3 top-[42px] h-5 w-5 text-gray-400" />
+                            </FormInputGroup>
+                          </div>
+                          <div className="relative">
+                            <FormInputGroup label="Barangay*">
+                              <select
+                                value={selectedBarangayCode}
+                                onChange={(e) =>
+                                  setSelectedBarangayCode(e.target.value)
+                                }
+                                className={selectStyles}
+                                disabled={!selectedCityCode}
+                                required
+                              >
+                                <option value="" disabled>
+                                  Select a barangay...
+                                </option>
+                                {phBarangaysList.map((barangay) => (
+                                  <option
+                                    key={barangay.brgy_code}
+                                    value={barangay.brgy_code}
                                   >
-                                    <option value="" disabled>
-                                      Select a city/municipality...
-                                    </option>
-                                    {phCitiesList.map((name) => (
-                                      <option key={name} value={name}>
-                                        {name}
-                                      </option>
-                                    ))}
-                                  </select>
-                                  <ChevronDownIcon className="pointer-events-none absolute right-3 top-[42px] h-5 w-5 text-gray-400" />
-                                </FormInputGroup>
-                              </div>
-                              <div className="relative">
-                                <FormInputGroup label="Barangay*">
-                                  <select
-                                    value={selectedBarangay}
-                                    onChange={(e) =>
-                                      setSelectedBarangay(e.target.value)
-                                    }
-                                    className={selectStyles}
-                                    disabled={!selectedCity}
-                                    required
-                                  >
-                                    <option value="" disabled>
-                                      Select a barangay...
-                                    </option>
-                                    {phBarangaysList.map((name) => (
-                                      <option key={name} value={name}>
-                                        {name}
-                                      </option>
-                                    ))}
-                                  </select>
-                                  <ChevronDownIcon className="pointer-events-none absolute right-3 top-[42px] h-5 w-5 text-gray-400" />
-                                </FormInputGroup>
-                              </div>
-                            </>
-                          )}
-                          {selectedCountry &&
-                            selectedCountry.isoCode !== "PH" &&
-                            states.length > 0 && (
-                              <div className="md:col-span-2 relative">
-                                <FormInputGroup label="State / Province*">
-                                  <select
-                                    value={selectedState}
-                                    onChange={(e) =>
-                                      setSelectedState(e.target.value)
-                                    }
-                                    className={selectStyles}
-                                    required
-                                  >
-                                    <option value="" disabled>
-                                      Select state/province...
-                                    </option>
-                                    {states.map((s) => (
-                                      <option key={s.isoCode} value={s.isoCode}>
-                                        {s.name}
-                                      </option>
-                                    ))}
-                                  </select>
-                                  <ChevronDownIcon className="pointer-events-none absolute right-3 top-[42px] h-5 w-5 text-gray-400" />
-                                </FormInputGroup>
-                              </div>
-                            )}
+                                    {barangay.brgy_name}
+                                  </option>
+                                ))}
+                              </select>
+                              <ChevronDownIcon className="pointer-events-none absolute right-3 top-[42px] h-5 w-5 text-gray-400" />
+                            </FormInputGroup>
+                          </div>
                           <FormInputGroup label="Street Address">
                             <input
                               type="text"
@@ -824,7 +926,6 @@ const EditPropertyModal = ({ isOpen, onClose, onSuccess, property }) => {
                     )}
                     {currentStep === 3 && (
                       <div className="space-y-4 animate-fadeIn">
-                        {/* ... (Step 3 JSX remains identical) ... */}
                         <h4 className="text-lg font-semibold text-gray-800 border-b pb-2">
                           Supporting Documents
                         </h4>
@@ -833,19 +934,17 @@ const EditPropertyModal = ({ isOpen, onClose, onSuccess, property }) => {
                           property.
                         </p>
                         <div className="space-y-6">
-                          // In the JSX for Step 3, update the ImageUploader
-                          components
                           <ImageUploader
                             label="Business License(s)"
                             files={businessLicenses}
-                            setFiles={setBusinessLicenses}
+                            setFiles={setBusinessLicensesWithDeletion}
                             description={licenseDescription}
                             setDescription={setLicenseDescription}
                           />
                           <ImageUploader
                             label="Certificate(s) of Registration"
                             files={certificates}
-                            setFiles={setCertificates}
+                            setFiles={setCertificatesWithDeletion}
                             description={certificateDescription}
                             setDescription={setCertificateDescription}
                           />
@@ -896,4 +995,5 @@ const EditPropertyModal = ({ isOpen, onClose, onSuccess, property }) => {
     </Transition>
   );
 };
+
 export default EditPropertyModal;

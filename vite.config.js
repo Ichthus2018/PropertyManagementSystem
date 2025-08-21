@@ -1,35 +1,38 @@
+// component 2 (vite.config.js) - OPTIMIZED
+
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react-swc";
 import tailwindcss from "@tailwindcss/vite";
-import { visualizer } from "rollup-plugin-visualizer"; // ← Import this
+import { visualizer } from "rollup-plugin-visualizer";
 
 export default defineConfig({
   plugins: [
     react(),
     tailwindcss(),
     visualizer({
-      filename: "stats.html", // Output file for visualization
-      open: false, // Automatically open after build
-      gzipSize: true, // Show gzip sizes
-      brotliSize: true, // Show brotli sizes
+      filename: "stats.html",
+      open: false,
+      gzipSize: true,
+      brotliSize: true,
     }),
   ],
   build: {
+    sourcemap: false,
     rollupOptions: {
       output: {
         manualChunks: {
-          // Split vendor libraries for better caching
+          // Keep your existing chunks
           vendor: [
             "react",
             "react-dom",
             "react-router-dom",
             "@supabase/supabase-js",
           ],
-          // Split large third-party libs if used
+          // Add new chunks for specific libraries
           ui: ["react-icons", "react-responsive-carousel"],
         },
       },
     },
-    chunkSizeWarningLimit: 1500, // raise warning limit (optional)
+    chunkSizeWarningLimit: 1000,
   },
 });

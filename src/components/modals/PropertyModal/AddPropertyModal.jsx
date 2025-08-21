@@ -13,6 +13,95 @@ import { v4 as uuidv4 } from "uuid";
 import { ChevronDownIcon } from "@heroicons/react/20/solid";
 import { IoMdClose } from "react-icons/io";
 import Stepper from "../../ui/common/Stepper";
+import axios from "axios";
+
+// --- New Philippine Address API Functions ---
+const fetchAddressData = (jsonPathName) =>
+  axios.get(
+    `https://isaacdarcilla.github.io/philippine-addresses/${jsonPathName}.json`
+  );
+
+/**
+ * @returns all regions
+ */
+const getRegions = async () => {
+  try {
+    const response = await fetchAddressData("region");
+    return response.data.map((region) => ({
+      id: region.id,
+      psgc_code: region.psgc_code,
+      region_name: region.region_name,
+      region_code: region.region_code,
+    }));
+  } catch (e) {
+    console.error("Error fetching regions:", e.message);
+    throw e;
+  }
+};
+
+/**
+ * @param {string} regionCode
+ * @returns all provinces based on region code parameter.
+ */
+const getProvinces = async (regionCode) => {
+  try {
+    const response = await fetchAddressData("province");
+    return response.data
+      .filter((province) => province.region_code === regionCode)
+      .map((filtered) => ({
+        psgc_code: filtered.psgc_code,
+        province_name: filtered.province_name,
+        province_code: filtered.province_code,
+        region_code: filtered.region_code,
+      }));
+  } catch (e) {
+    console.error("Error fetching provinces:", e.message);
+    throw e;
+  }
+};
+
+/**
+ * @param {string} provinceCode
+ * @returns all cities based on province code parameter.
+ */
+const getCities = async (provinceCode) => {
+  try {
+    const response = await fetchAddressData("city");
+    return response.data
+      .filter((city) => city.province_code === provinceCode)
+      .map((filtered) => ({
+        city_name: filtered.city_name,
+        city_code: filtered.city_code,
+        province_code: filtered.province_code,
+        region_desc: filtered.region_desc,
+      }));
+  } catch (e) {
+    console.error("Error fetching cities:", e.message);
+    throw e;
+  }
+};
+
+/**
+ * @param {string} cityCode
+ * @returns all barangays based on city code parameter.
+ */
+const getBarangays = async (cityCode) => {
+  try {
+    const response = await fetchAddressData("barangay");
+    return response.data
+      .filter((barangay) => barangay.city_code === cityCode)
+      .map((filtered) => ({
+        brgy_name: filtered.brgy_name,
+        brgy_code: filtered.brgy_code,
+        province_code: filtered.province_code,
+        region_code: filtered.region_code,
+      }));
+  } catch (e) {
+    console.error("Error fetching barangays:", e.message);
+    throw e;
+  }
+};
+// --- End of New Address Functions ---
 
 // --- Helper components and functions ---
 const FormInputGroup = ({ label, children, description }) => (
@@ -29,6 +118,8 @@ const inputStyles =
   "block w-full text-sm rounded-lg border-gray-300 bg-gray-50 p-2.5 text-gray-900 focus:border-orange-500 focus:ring-orange-500 disabled:cursor-not-allowed disabled:opacity-60";
 const selectStyles = `${inputStyles} appearance-none`;
 
+// --- IMAGE OPTIMIZATION: Helper functions for image conversion ---
+
 const changeFileExtension = (filename, newExtension) => {
   const lastDot = filename.lastIndexOf(".");
   const baseName = lastDot === -1 ? filename : filename.substring(0, lastDot);
@@ -37,6 +128,7 @@ const changeFileExtension = (filename, newExtension) => {
 
 const convertImageToAvif = (file, options = { quality: 0.8 }) => {
   return new Promise((resolve) => {
+    // Check if the browser can even create an AVIF.
     const canvas = document.createElement("canvas");
     if (
       typeof canvas.toDataURL !== "function" ||
@@ -163,21 +255,17 @@ const AddPropertyModal = ({ isOpen, onClose, onSuccess }) => {
   const [street, setStreet] = useState("");
   const [zipCode, setZipCode] = useState("");
 
-  // Location State
-  const [countries, setCountries] = useState([]);
-  const [states, setStates] = useState([]);
-  const [selectedCountry, setSelectedCountry] = useState(null);
-  const [selectedState, setSelectedState] = useState("");
-
+  // Location State (Philippines Only) - Stores arrays of objects
   const [phRegionsList, setPhRegionsList] = useState([]);
   const [phProvincesList, setPhProvincesList] = useState([]);
   const [phCitiesList, setPhCitiesList] = useState([]);
   const [phBarangaysList, setPhBarangaysList] = useState([]);
 
-  const [selectedRegion, setSelectedRegion] = useState("");
-  const [selectedProvince, setSelectedProvince] = useState("");
-  const [selectedCity, setSelectedCity] = useState("");
-  const [selectedBarangay, setSelectedBarangay] = useState("");
+  // Location State - Stores the selected CODE for each level
+  const [selectedRegionCode, setSelectedRegionCode] = useState("");
+  const [selectedProvinceCode, setSelectedProvinceCode] = useState("");
+  const [selectedCityCode, setSelectedCityCode] = useState("");
+  const [selectedBarangayCode, setSelectedBarangayCode] = useState("");
 
   // Document State
   const [businessLicenses, setBusinessLicenses] = useState([]);
@@ -190,110 +278,88 @@ const AddPropertyModal = ({ isOpen, onClose, onSuccess }) => {
   const parsedTotalUnitSqm = parseFloat(totalUnitSqm || 0);
   const unusedSqm = parsedOverallSqm - parsedTotalUnitSqm;
 
-  // --- Effects (The rest of the component remains unchanged) ---
+  // --- Effects for fetching address data ---
 
+  // Fetch Regions on component mount
   useEffect(() => {
-    const loadInitialCountries = async () => {
-      const { Country } = await import("country-state-city");
-      const allCountries = Country.getAllCountries();
-      setCountries(allCountries);
-      const philippines = allCountries.find((c) => c.isoCode === "PH");
-      if (philippines) {
-        setSelectedCountry(philippines);
-      }
-    };
     const loadInitialPhRegions = async () => {
       try {
-        const { default: barangay } = await import("barangay");
-        setPhRegionsList(barangay());
+        const regionsData = await getRegions();
+        setPhRegionsList(regionsData);
       } catch (e) {
         console.error("Failed to load Philippine regions:", e);
         setPhRegionsList([]);
       }
     };
-    loadInitialCountries();
     loadInitialPhRegions();
   }, []);
 
+  // Fetch Provinces when a Region is selected
   useEffect(() => {
-    const loadStates = async () => {
-      if (selectedCountry) {
-        if (selectedCountry.isoCode !== "PH") {
-          const { State } = await import("country-state-city");
-          setStates(State.getStatesOfCountry(selectedCountry.isoCode));
-        } else {
-          setStates([]);
-        }
-        setSelectedState("");
-        setSelectedRegion("");
-        setSelectedProvince("");
-        setSelectedCity("");
-        setSelectedBarangay("");
-      } else {
-        setStates([]);
-      }
-    };
-    loadStates();
-  }, [selectedCountry]);
+    // FIX: Clear province list and reset selections immediately when region changes.
+    // This prevents showing stale data from the previously selected region.
+    setPhProvincesList([]);
+    setSelectedProvinceCode("");
 
-  useEffect(() => {
     const loadProvinces = async () => {
-      if (selectedRegion) {
+      if (selectedRegionCode) {
         try {
-          const { default: barangay } = await import("barangay");
-          setPhProvincesList(barangay(selectedRegion));
+          const provincesData = await getProvinces(selectedRegionCode);
+          setPhProvincesList(provincesData);
         } catch (e) {
-          console.error(`Failed to load provinces for ${selectedRegion}:`, e);
+          console.error(
+            `Failed to load provinces for ${selectedRegionCode}:`,
+            e
+          );
           setPhProvincesList([]);
         }
-      } else {
-        setPhProvincesList([]);
       }
-      setSelectedProvince("");
-      setSelectedCity("");
-      setSelectedBarangay("");
     };
     loadProvinces();
-  }, [selectedRegion]);
+  }, [selectedRegionCode]);
 
+  // Fetch Cities when a Province is selected
   useEffect(() => {
+    // FIX: Clear city list and reset selections immediately when province changes.
+    setPhCitiesList([]);
+    setSelectedCityCode("");
+
     const loadCities = async () => {
-      if (selectedRegion && selectedProvince) {
+      if (selectedProvinceCode) {
         try {
-          const { default: barangay } = await import("barangay");
-          setPhCitiesList(barangay(selectedRegion, selectedProvince));
+          const citiesData = await getCities(selectedProvinceCode);
+          setPhCitiesList(citiesData);
         } catch (e) {
-          console.error(`Failed to load cities for ${selectedProvince}:`, e);
+          console.error(
+            `Failed to load cities for ${selectedProvinceCode}:`,
+            e
+          );
           setPhCitiesList([]);
         }
-      } else {
-        setPhCitiesList([]);
       }
-      setSelectedCity("");
-      setSelectedBarangay("");
     };
     loadCities();
-  }, [selectedRegion, selectedProvince]);
+  }, [selectedProvinceCode]);
 
+  // Fetch Barangays when a City is selected
   useEffect(() => {
+    // FIX: Clear barangay list and reset selection immediately when city changes.
+    setPhBarangaysList([]);
+    setSelectedBarangayCode("");
+
     const loadBarangays = async () => {
-      if (selectedRegion && selectedProvince && selectedCity) {
+      if (selectedCityCode) {
         try {
-          const { default: barangay } = await import("barangay");
-          setPhBarangaysList(
-            barangay(selectedRegion, selectedProvince, selectedCity)
-          );
+          const barangaysData = await getBarangays(selectedCityCode);
+          setPhBarangaysList(barangaysData);
         } catch (e) {
-          console.error(`Failed to load barangays for ${selectedCity}:`, e);
+          console.error(`Failed to load barangays for ${selectedCityCode}:`, e);
           setPhBarangaysList([]);
         }
-      } else {
-        setPhBarangaysList([]);
       }
-      setSelectedBarangay("");
     };
     loadBarangays();
-  }, [selectedRegion, selectedProvince, selectedCity]);
+  }, [selectedCityCode]);
 
   const resetForm = () => {
     setPropertyName("");
@@ -302,11 +368,10 @@ const AddPropertyModal = ({ isOpen, onClose, onSuccess }) => {
     setTotalUnitSqm("");
     setStreet("");
     setZipCode("");
-    setSelectedState("");
-    setSelectedRegion("");
-    setSelectedProvince("");
-    setSelectedCity("");
-    setSelectedBarangay("");
+    setSelectedRegionCode("");
+    setSelectedProvinceCode("");
+    setSelectedCityCode("");
+    setSelectedBarangayCode("");
     setBusinessLicenses([]);
     setCertificates([]);
     setLicenseDescription("");
@@ -314,20 +379,6 @@ const AddPropertyModal = ({ isOpen, onClose, onSuccess }) => {
     setError("");
     setStepError("");
     setCurrentStep(1);
-
-    import("country-state-city")
-      .then(({ Country }) => {
-        const philippines = Country.getCountryByCode("PH");
-        if (philippines) {
-          setSelectedCountry(philippines);
-        } else {
-          setSelectedCountry(null);
-        }
-      })
-      .catch((err) => {
-        console.error("Failed to load country data for reset:", err);
-        setSelectedCountry(null);
-      });
   };
 
   const handleClose = () => {
@@ -351,31 +402,17 @@ const AddPropertyModal = ({ isOpen, onClose, onSuccess }) => {
       }
     }
     if (currentStep === 2) {
-      if (!selectedCountry) {
-        setStepError("Country is a required field.");
+      if (!selectedRegionCode) {
+        setStepError("Region is a required field.");
         isValid = false;
-      } else if (selectedCountry.isoCode === "PH") {
-        if (!selectedRegion) {
-          setStepError("Region is required for properties in the Philippines.");
-          isValid = false;
-        } else if (!selectedProvince) {
-          setStepError(
-            "Province is required for properties in the Philippines."
-          );
-          isValid = false;
-        } else if (!selectedCity) {
-          setStepError(
-            "City / Municipality is required for properties in the Philippines."
-          );
-          isValid = false;
-        } else if (!selectedBarangay) {
-          setStepError(
-            "Barangay is required for properties in the Philippines."
-          );
-          isValid = false;
-        }
-      } else if (states.length > 0 && !selectedState) {
-        setStepError("State / Province is required.");
+      } else if (!selectedProvinceCode) {
+        setStepError("Province is a required field.");
+        isValid = false;
+      } else if (!selectedCityCode) {
+        setStepError("City / Municipality is a required field.");
+        isValid = false;
+      } else if (!selectedBarangayCode) {
+        setStepError("Barangay is a required field.");
         isValid = false;
       }
     }
@@ -421,8 +458,21 @@ const AddPropertyModal = ({ isOpen, onClose, onSuccess }) => {
         files: uploadedCertFiles,
         description: certificateDescription.trim(),
       };
-      const stateName =
-        states.find((s) => s.isoCode === selectedState)?.name || "";
+
+      // Find the selected names from the lists using the stored codes
+      const selectedRegionName = phRegionsList.find(
+        (r) => r.region_code === selectedRegionCode
+      )?.region_name;
+      const selectedProvinceName = phProvincesList.find(
+        (p) => p.province_code === selectedProvinceCode
+      )?.province_name;
+      const selectedCityName = phCitiesList.find(
+        (c) => c.city_code === selectedCityCode
+      )?.city_name;
+      const selectedBarangayName = phBarangaysList.find(
+        (b) => b.brgy_code === selectedBarangayCode
+      )?.brgy_name;
+
       const propertyData = {
         created_by: userProfile.id,
         last_edited_by: userProfile.id,
@@ -430,24 +480,18 @@ const AddPropertyModal = ({ isOpen, onClose, onSuccess }) => {
         number_of_units: numberOfUnits ? parseInt(numberOfUnits, 10) : null,
         total_sqm: totalUnitSqm ? parseFloat(totalUnitSqm) : null,
         overall_sqm: overallSqm ? parseFloat(overallSqm) : null,
-        address_country: selectedCountry?.name,
-        address_country_iso: selectedCountry?.isoCode,
+        address_country: "Philippines",
+        address_country_iso: "PH",
         address_street: street.trim(),
         address_zip_code: zipCode.trim() || null,
-        ...(selectedCountry?.isoCode === "PH"
-          ? {
-              address_region: selectedRegion || null,
-              address_province: selectedProvince || null,
-              address_city_municipality: selectedCity || null,
-              address_barangay: selectedBarangay || null,
-            }
-          : {
-              address_state: stateName,
-              address_state_iso: selectedState || null,
-            }),
+        address_region: selectedRegionName || null,
+        address_province: selectedProvinceName || null,
+        address_city_municipality: selectedCityName || null,
+        address_barangay: selectedBarangayName || null,
         business_licenses: licenseData,
         certificates_of_registration: certificateData,
       };
+
       const { error: insertError } = await supabase
         .from("properties")
         .insert([propertyData]);
@@ -465,7 +509,6 @@ const AddPropertyModal = ({ isOpen, onClose, onSuccess }) => {
   return (
     <Transition appear show={isOpen} as={Fragment}>
       <Dialog as="div" className="relative z-50" onClose={handleClose}>
-        {/* The entire JSX for the modal remains unchanged */}
         <TransitionChild
           as={Fragment}
           enter="ease-out duration-300"
@@ -634,151 +677,123 @@ const AddPropertyModal = ({ isOpen, onClose, onSuccess }) => {
                           Location
                         </h4>
                         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                          <div className="md:col-span-2 relative">
+                          <div className="md:col-span-2">
                             <FormInputGroup label="Country*">
+                              <input
+                                type="text"
+                                value="Philippines"
+                                className={inputStyles}
+                                disabled
+                                readOnly
+                              />
+                            </FormInputGroup>
+                          </div>
+
+                          {/* Philippines-specific address fields */}
+                          <div className="relative">
+                            <FormInputGroup label="Region*">
                               <select
-                                value={selectedCountry?.isoCode || ""}
-                                onChange={async (e) => {
-                                  const { Country } = await import(
-                                    "country-state-city"
-                                  );
-                                  setSelectedCountry(
-                                    Country.getCountryByCode(e.target.value)
-                                  );
-                                }}
+                                value={selectedRegionCode}
+                                onChange={(e) =>
+                                  setSelectedRegionCode(e.target.value)
+                                }
                                 className={selectStyles}
                                 required
                               >
-                                {countries.map((c) => (
-                                  <option key={c.isoCode} value={c.isoCode}>
-                                    {c.name}
+                                <option value="" disabled>
+                                  Select a region...
+                                </option>
+                                {phRegionsList.map((region) => (
+                                  <option
+                                    key={region.region_code}
+                                    value={region.region_code}
+                                  >
+                                    {region.region_name}
                                   </option>
                                 ))}
                               </select>
                               <ChevronDownIcon className="pointer-events-none absolute right-3 top-[42px] h-5 w-5 text-gray-400" />
                             </FormInputGroup>
                           </div>
-                          {selectedCountry?.isoCode === "PH" && (
-                            <>
-                              <div className="relative">
-                                <FormInputGroup label="Region*">
-                                  <select
-                                    value={selectedRegion}
-                                    onChange={(e) =>
-                                      setSelectedRegion(e.target.value)
-                                    }
-                                    className={selectStyles}
-                                    required
+                          <div className="relative">
+                            <FormInputGroup label="Province*">
+                              <select
+                                value={selectedProvinceCode}
+                                onChange={(e) =>
+                                  setSelectedProvinceCode(e.target.value)
+                                }
+                                className={selectStyles}
+                                disabled={!selectedRegionCode}
+                                required
+                              >
+                                <option value="" disabled>
+                                  Select a province...
+                                </option>
+                                {phProvincesList.map((province) => (
+                                  <option
+                                    key={province.province_code}
+                                    value={province.province_code}
                                   >
-                                    <option value="" disabled>
-                                      Select a region...
-                                    </option>
-                                    {phRegionsList.map((name) => (
-                                      <option key={name} value={name}>
-                                        {name}
-                                      </option>
-                                    ))}
-                                  </select>
-                                  <ChevronDownIcon className="pointer-events-none absolute right-3 top-[42px] h-5 w-5 text-gray-400" />
-                                </FormInputGroup>
-                              </div>
-                              <div className="relative">
-                                <FormInputGroup label="Province*">
-                                  <select
-                                    value={selectedProvince}
-                                    onChange={(e) =>
-                                      setSelectedProvince(e.target.value)
-                                    }
-                                    className={selectStyles}
-                                    disabled={!selectedRegion}
-                                    required
+                                    {province.province_name}
+                                  </option>
+                                ))}
+                              </select>
+                              <ChevronDownIcon className="pointer-events-none absolute right-3 top-[42px] h-5 w-5 text-gray-400" />
+                            </FormInputGroup>
+                          </div>
+                          <div className="relative">
+                            <FormInputGroup label="City / Municipality*">
+                              <select
+                                value={selectedCityCode}
+                                onChange={(e) =>
+                                  setSelectedCityCode(e.target.value)
+                                }
+                                className={selectStyles}
+                                disabled={!selectedProvinceCode}
+                                required
+                              >
+                                <option value="" disabled>
+                                  Select a city/municipality...
+                                </option>
+                                {phCitiesList.map((city) => (
+                                  <option
+                                    key={city.city_code}
+                                    value={city.city_code}
                                   >
-                                    <option value="" disabled>
-                                      Select a province...
-                                    </option>
-                                    {phProvincesList.map((name) => (
-                                      <option key={name} value={name}>
-                                        {name}
-                                      </option>
-                                    ))}
-                                  </select>
-                                  <ChevronDownIcon className="pointer-events-none absolute right-3 top-[42px] h-5 w-5 text-gray-400" />
-                                </FormInputGroup>
-                              </div>
-                              <div className="relative">
-                                <FormInputGroup label="City / Municipality*">
-                                  <select
-                                    value={selectedCity}
-                                    onChange={(e) =>
-                                      setSelectedCity(e.target.value)
-                                    }
-                                    className={selectStyles}
-                                    disabled={!selectedProvince}
-                                    required
+                                    {city.city_name}
+                                  </option>
+                                ))}
+                              </select>
+                              <ChevronDownIcon className="pointer-events-none absolute right-3 top-[42px] h-5 w-5 text-gray-400" />
+                            </FormInputGroup>
+                          </div>
+                          <div className="relative">
+                            <FormInputGroup label="Barangay*">
+                              <select
+                                value={selectedBarangayCode}
+                                onChange={(e) =>
+                                  setSelectedBarangayCode(e.target.value)
+                                }
+                                className={selectStyles}
+                                disabled={!selectedCityCode}
+                                required
+                              >
+                                <option value="" disabled>
+                                  Select a barangay...
+                                </option>
+                                {phBarangaysList.map((barangay) => (
+                                  <option
+                                    key={barangay.brgy_code}
+                                    value={barangay.brgy_code}
                                   >
-                                    <option value="" disabled>
-                                      Select a city/municipality...
-                                    </option>
-                                    {phCitiesList.map((name) => (
-                                      <option key={name} value={name}>
-                                        {name}
-                                      </option>
-                                    ))}
-                                  </select>
-                                  <ChevronDownIcon className="pointer-events-none absolute right-3 top-[42px] h-5 w-5 text-gray-400" />
-                                </FormInputGroup>
-                              </div>
-                              <div className="relative">
-                                <FormInputGroup label="Barangay*">
-                                  <select
-                                    value={selectedBarangay}
-                                    onChange={(e) =>
-                                      setSelectedBarangay(e.target.value)
-                                    }
-                                    className={selectStyles}
-                                    disabled={!selectedCity}
-                                    required
-                                  >
-                                    <option value="" disabled>
-                                      Select a barangay...
-                                    </option>
-                                    {phBarangaysList.map((name) => (
-                                      <option key={name} value={name}>
-                                        {name}
-                                      </option>
-                                    ))}
-                                  </select>
-                                  <ChevronDownIcon className="pointer-events-none absolute right-3 top-[42px] h-5 w-5 text-gray-400" />
-                                </FormInputGroup>
-                              </div>
-                            </>
-                          )}
-                          {selectedCountry &&
-                            selectedCountry.isoCode !== "PH" &&
-                            states.length > 0 && (
-                              <div className="md:col-span-2 relative">
-                                <FormInputGroup label="State / Province*">
-                                  <select
-                                    value={selectedState}
-                                    onChange={(e) =>
-                                      setSelectedState(e.target.value)
-                                    }
-                                    className={selectStyles}
-                                    required
-                                  >
-                                    <option value="" disabled>
-                                      Select state/province...
-                                    </option>
-                                    {states.map((s) => (
-                                      <option key={s.isoCode} value={s.isoCode}>
-                                        {s.name}
-                                      </option>
-                                    ))}
-                                  </select>
-                                  <ChevronDownIcon className="pointer-events-none absolute right-3 top-[42px] h-5 w-5 text-gray-400" />
-                                </FormInputGroup>
-                              </div>
-                            )}
+                                    {barangay.brgy_name}
+                                  </option>
+                                ))}
+                              </select>
+                              <ChevronDownIcon className="pointer-events-none absolute right-3 top-[42px] h-5 w-5 text-gray-400" />
+                            </FormInputGroup>
+                          </div>
+
                           <FormInputGroup label="Street Address">
                             <input
                               type="text"

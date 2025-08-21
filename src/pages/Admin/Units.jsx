@@ -1,19 +1,31 @@
 // src/pages/Units.jsx
 
-import { useState } from "react";
+import { useState, Suspense, lazy } from "react"; // 1. Import Suspense and lazy
 import { useSupabaseQuery } from "../../hooks/useSupabaseQuery";
 import supabase from "../../lib/supabase";
 
+// Lightweight, common components that are needed for initial render
 import PageHeader from "../../components/ui/common/PageHeader";
 import SearchInput from "../../components/ui/common/SearchInput";
 import DataTable from "../../components/ui/common/DataTable";
+import LoadingSpinner from "../../components/ui/LoadingSpinner"; // 2. Import a fallback component
 
-import UnitsTable from "../../components/pages/units/UnitsTable";
-import UnitCard from "../../components/pages/units/UnitCard";
+// 3. Lazy-load the heavier, feature-specific components
+const UnitsTable = lazy(() =>
+  import("../../components/pages/units/UnitsTable")
+);
+const UnitCard = lazy(() => import("../../components/pages/units/UnitCard"));
 
-import UnitModal from "../../components/modals/UnitModal/UnitModal";
-import EditUnitModal from "../../components/modals/UnitModal/EditUnitModal";
-import DeleteUnitModal from "../../components/modals/UnitModal/DeleteUnitModal";
+// Lazy-load modals
+const UnitModal = lazy(() =>
+  import("../../components/modals/UnitModal/UnitModal")
+);
+const EditUnitModal = lazy(() =>
+  import("../../components/modals/UnitModal/EditUnitModal")
+);
+const DeleteUnitModal = lazy(() =>
+  import("../../components/modals/UnitModal/DeleteUnitModal")
+);
 
 const Units = () => {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -39,9 +51,6 @@ const Units = () => {
     clearSearch,
   } = useSupabaseQuery({
     tableName: "units",
-    // ====================== THE FIX IS HERE ======================
-    // We must select all the foreign key IDs so that the Edit Modal
-    // knows which values to pre-select in the dropdowns.
     selectQuery: `
       id, name, sqm, property_id,
       unit_type_id,
@@ -52,15 +61,13 @@ const Units = () => {
       properties (property_name, number_of_units, total_sqm), 
       unit_types (unit_type)
     `,
-    // =============================================================
     searchColumn: "name",
     initialPageSize: 10,
   });
 
-  // This handler is now passed to the UnitModal to be called on success
   const handleAddSuccess = () => {
     setIsAddModalOpen(false);
-    mutate(); // Re-fetch all units data
+    mutate();
   };
 
   const openEditModal = (unit) => {
@@ -71,7 +78,7 @@ const Units = () => {
   const handleEditSuccess = () => {
     setIsEditModalOpen(false);
     setSelectedUnit(null);
-    mutate(); // Re-fetch data to show the changes
+    mutate();
   };
 
   const openDeleteModal = (unit) => {
@@ -103,25 +110,30 @@ const Units = () => {
     }
   };
 
+  // 4. Wrap the lazy components in <Suspense> inside the render functions
   const renderDesktopTable = (data) => (
-    <UnitsTable
-      units={data}
-      onEdit={openEditModal}
-      onDelete={openDeleteModal}
-    />
+    <Suspense fallback={<LoadingSpinner />}>
+      <UnitsTable
+        units={data}
+        onEdit={openEditModal}
+        onDelete={openDeleteModal}
+      />
+    </Suspense>
   );
 
   const renderMobileCards = (data) => (
-    <div className="space-y-4 p-4">
-      {data.map((unit) => (
-        <UnitCard
-          key={unit.id}
-          unit={unit}
-          onEdit={() => openEditModal(unit)}
-          onDelete={() => openDeleteModal(unit)}
-        />
-      ))}
-    </div>
+    <Suspense fallback={<LoadingSpinner />}>
+      <div className="space-y-4 p-4">
+        {data.map((unit) => (
+          <UnitCard
+            key={unit.id}
+            unit={unit}
+            onEdit={() => openEditModal(unit)}
+            onDelete={() => openDeleteModal(unit)}
+          />
+        ))}
+      </div>
+    </Suspense>
   );
 
   return (
@@ -161,29 +173,32 @@ const Units = () => {
       </div>
 
       {/* --- Modals --- */}
-      <UnitModal
-        isOpen={isAddModalOpen}
-        onClose={() => setIsAddModalOpen(false)}
-        onSuccess={handleAddSuccess} // Pass the success handler
-      />
+      {/* 5. Wrap the modals in a single Suspense with a null fallback */}
+      <Suspense fallback={null}>
+        <UnitModal
+          isOpen={isAddModalOpen}
+          onClose={() => setIsAddModalOpen(false)}
+          onSuccess={handleAddSuccess}
+        />
 
-      {selectedUnit && (
-        <>
-          <EditUnitModal
-            isOpen={isEditModalOpen}
-            onClose={() => setIsEditModalOpen(false)}
-            onSuccess={handleEditSuccess}
-            unit={selectedUnit}
-          />
-          <DeleteUnitModal
-            isOpen={isDeleteModalOpen}
-            onClose={() => setIsDeleteModalOpen(false)}
-            onConfirm={handleConfirmDelete}
-            isDeleting={isProcessing}
-            itemName={selectedUnit.name}
-          />
-        </>
-      )}
+        {selectedUnit && (
+          <>
+            <EditUnitModal
+              isOpen={isEditModalOpen}
+              onClose={() => setIsEditModalOpen(false)}
+              onSuccess={handleEditSuccess}
+              unit={selectedUnit}
+            />
+            <DeleteUnitModal
+              isOpen={isDeleteModalOpen}
+              onClose={() => setIsDeleteModalOpen(false)}
+              onConfirm={handleConfirmDelete}
+              isDeleting={isProcessing}
+              itemName={selectedUnit.name}
+            />
+          </>
+        )}
+      </Suspense>
     </>
   );
 };
