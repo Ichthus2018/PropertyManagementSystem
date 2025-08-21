@@ -51,7 +51,7 @@ const PropertiesTable = ({
               {/* Card Main Content */}
               <div className="p-6">
                 {/* Card Header */}
-                <div className="flex justify-center mb-6 bg-orange-200 py-4 rounded-xl">
+                <div className="flex justify-center mb-6  shadow-sm py-4 rounded-xl bg-gray-100">
                   <h2 className="text-xl font-bold text-gray-900 text-center">
                     {p.property_name}
                   </h2>
