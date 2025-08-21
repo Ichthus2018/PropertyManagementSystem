@@ -9,7 +9,7 @@ export default defineConfig({
     tailwindcss(),
     visualizer({
       filename: "stats.html", // Output file for visualization
-      open: true, // Automatically open after build
+      open: false, // Automatically open after build
       gzipSize: true, // Show gzip sizes
       brotliSize: true, // Show brotli sizes
     }),
