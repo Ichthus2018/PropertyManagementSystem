@@ -1,5 +1,3 @@
-// src/components/modals/PropertyModal/AddPropertyModal.jsx
-
 import { useState, useEffect, Fragment } from "react";
 import {
   Dialog,
@@ -10,8 +8,6 @@ import {
 } from "@headlessui/react";
 import supabase from "../../../lib/supabase";
 import { useAuthStore } from "../../../store/useAuthStore";
-import { Country, State } from "country-state-city";
-import barangay from "barangay";
 import ImageUploader from "../../ui/ImageUploader";
 import { v4 as uuidv4 } from "uuid";
 import { ChevronDownIcon } from "@heroicons/react/20/solid";
@@ -33,6 +29,74 @@ const inputStyles =
   "block w-full text-sm rounded-lg border-gray-300 bg-gray-50 p-2.5 text-gray-900 focus:border-orange-500 focus:ring-orange-500 disabled:cursor-not-allowed disabled:opacity-60";
 const selectStyles = `${inputStyles} appearance-none`;
 
+const changeFileExtension = (filename, newExtension) => {
+  const lastDot = filename.lastIndexOf(".");
+  const baseName = lastDot === -1 ? filename : filename.substring(0, lastDot);
+  return `${baseName}.${newExtension}`;
+};
+
+const convertImageToAvif = (file, options = { quality: 0.8 }) => {
+  return new Promise((resolve) => {
+    const canvas = document.createElement("canvas");
+    if (
+      typeof canvas.toDataURL !== "function" ||
+      canvas.toDataURL("image/avif").indexOf("data:image/avif") < 0
+    ) {
+      console.warn(
+        "AVIF conversion not supported by this browser. Uploading original file."
+      );
+      resolve(file); // Fallback to original file
+      return;
+    }
+
+    const blobURL = URL.createObjectURL(file);
+    const img = new Image();
+
+    img.onload = () => {
+      canvas.width = img.width;
+      canvas.height = img.height;
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(img, 0, 0);
+
+      canvas.toBlob(
+        (blob) => {
+          URL.revokeObjectURL(blobURL); // Clean up memory
+          if (blob && blob.type === "image/avif") {
+            const newFileName = changeFileExtension(file.name, "avif");
+            const avifFile = new File([blob], newFileName, {
+              type: "image/avif",
+            });
+            console.log(
+              `Converted ${file.name} (${(file.size / 1024).toFixed(
+                2
+              )} KB) to ${avifFile.name} (${(avifFile.size / 1024).toFixed(
+                2
+              )} KB)`
+            );
+            resolve(avifFile);
+          } else {
+            // Fallback if conversion fails for any reason
+            resolve(file);
+          }
+        },
+        "image/avif",
+        options.quality
+      );
+    };
+
+    img.onerror = () => {
+      URL.revokeObjectURL(blobURL);
+      console.error(
+        "Could not load image for conversion. Uploading original file."
+      );
+      resolve(file); // Fallback to original file
+    };
+
+    img.src = blobURL;
+  });
+};
+
+// --- IMAGE OPTIMIZATION: Updated uploadFiles function ---
 const uploadFiles = async (files, userId) => {
   if (!userId) {
     throw new Error("User ID is required for uploading files.");
@@ -40,15 +104,31 @@ const uploadFiles = async (files, userId) => {
   const uploadedFileData = [];
   for (const item of files) {
     if (item.source === "new" && item.file) {
-      const filePath = `user_${userId}/${uuidv4()}-${item.file.name}`;
+      let fileToUpload = item.file;
+
+      // Check if the file is an image and convert it to AVIF if possible
+      if (item.file.type.startsWith("image/")) {
+        try {
+          fileToUpload = await convertImageToAvif(item.file);
+        } catch (conversionError) {
+          console.error(
+            "Image conversion failed, uploading original:",
+            conversionError
+          );
+          fileToUpload = item.file; // Ensure fallback on error
+        }
+      }
+
+      // The filePath uses the name of the file being uploaded (which might now be .avif)
+      const filePath = `user_${userId}/${uuidv4()}-${fileToUpload.name}`;
 
       const { error: uploadError } = await supabase.storage
         .from("property-documents")
-        .upload(filePath, item.file);
+        .upload(filePath, fileToUpload); // Use the (potentially converted) file
 
       if (uploadError) {
         console.error("Supabase upload error:", uploadError);
-        throw new Error(`Failed to upload ${item.file.name}.`);
+        throw new Error(`Failed to upload ${fileToUpload.name}.`);
       }
 
       const { data } = supabase.storage
@@ -56,7 +136,7 @@ const uploadFiles = async (files, userId) => {
         .getPublicUrl(filePath);
 
       if (!data?.publicUrl) {
-        throw new Error(`Could not get public URL for ${item.file.name}.`);
+        throw new Error(`Could not get public URL for ${fileToUpload.name}.`);
       }
 
       uploadedFileData.push({ url: data.publicUrl, path: filePath });
@@ -78,9 +158,8 @@ const AddPropertyModal = ({ isOpen, onClose, onSuccess }) => {
   // Form State
   const [propertyName, setPropertyName] = useState("");
   const [numberOfUnits, setNumberOfUnits] = useState("");
-  // --- MODIFIED STATE ---
-  const [overallSqm, setOverallSqm] = useState(""); // Total physical size of property
-  const [totalUnitSqm, setTotalUnitSqm] = useState(""); // Total size of rentable units
+  const [overallSqm, setOverallSqm] = useState("");
+  const [totalUnitSqm, setTotalUnitSqm] = useState("");
   const [street, setStreet] = useState("");
   const [zipCode, setZipCode] = useState("");
 
@@ -111,91 +190,114 @@ const AddPropertyModal = ({ isOpen, onClose, onSuccess }) => {
   const parsedTotalUnitSqm = parseFloat(totalUnitSqm || 0);
   const unusedSqm = parsedOverallSqm - parsedTotalUnitSqm;
 
-  // --- Effects (no changes here) ---
+  // --- Effects (The rest of the component remains unchanged) ---
+
   useEffect(() => {
-    const allCountries = Country.getAllCountries();
-    setCountries(allCountries);
-    const philippines = allCountries.find((c) => c.isoCode === "PH");
-    if (philippines) {
-      setSelectedCountry(philippines);
-    }
-    try {
-      setPhRegionsList(barangay());
-    } catch (e) {
-      console.error("Failed to load Philippine regions:", e);
-      setPhRegionsList([]);
-    }
+    const loadInitialCountries = async () => {
+      const { Country } = await import("country-state-city");
+      const allCountries = Country.getAllCountries();
+      setCountries(allCountries);
+      const philippines = allCountries.find((c) => c.isoCode === "PH");
+      if (philippines) {
+        setSelectedCountry(philippines);
+      }
+    };
+    const loadInitialPhRegions = async () => {
+      try {
+        const { default: barangay } = await import("barangay");
+        setPhRegionsList(barangay());
+      } catch (e) {
+        console.error("Failed to load Philippine regions:", e);
+        setPhRegionsList([]);
+      }
+    };
+    loadInitialCountries();
+    loadInitialPhRegions();
   }, []);
 
   useEffect(() => {
-    if (selectedCountry) {
-      if (selectedCountry.isoCode !== "PH") {
-        setStates(State.getStatesOfCountry(selectedCountry.isoCode));
+    const loadStates = async () => {
+      if (selectedCountry) {
+        if (selectedCountry.isoCode !== "PH") {
+          const { State } = await import("country-state-city");
+          setStates(State.getStatesOfCountry(selectedCountry.isoCode));
+        } else {
+          setStates([]);
+        }
+        setSelectedState("");
+        setSelectedRegion("");
+        setSelectedProvince("");
+        setSelectedCity("");
+        setSelectedBarangay("");
       } else {
         setStates([]);
       }
-      setSelectedState("");
-      setSelectedRegion("");
-      setSelectedProvince("");
-      setSelectedCity("");
-      setSelectedBarangay("");
-    } else {
-      setStates([]);
-    }
+    };
+    loadStates();
   }, [selectedCountry]);
 
   useEffect(() => {
-    if (selectedRegion) {
-      try {
-        setPhProvincesList(barangay(selectedRegion));
-      } catch (e) {
-        console.error(`Failed to load provinces for ${selectedRegion}:`, e);
+    const loadProvinces = async () => {
+      if (selectedRegion) {
+        try {
+          const { default: barangay } = await import("barangay");
+          setPhProvincesList(barangay(selectedRegion));
+        } catch (e) {
+          console.error(`Failed to load provinces for ${selectedRegion}:`, e);
+          setPhProvincesList([]);
+        }
+      } else {
         setPhProvincesList([]);
       }
-    } else {
-      setPhProvincesList([]);
-    }
-    setSelectedProvince("");
-    setSelectedCity("");
-    setSelectedBarangay("");
+      setSelectedProvince("");
+      setSelectedCity("");
+      setSelectedBarangay("");
+    };
+    loadProvinces();
   }, [selectedRegion]);
 
   useEffect(() => {
-    if (selectedRegion && selectedProvince) {
-      try {
-        setPhCitiesList(barangay(selectedRegion, selectedProvince));
-      } catch (e) {
-        console.error(`Failed to load cities for ${selectedProvince}:`, e);
+    const loadCities = async () => {
+      if (selectedRegion && selectedProvince) {
+        try {
+          const { default: barangay } = await import("barangay");
+          setPhCitiesList(barangay(selectedRegion, selectedProvince));
+        } catch (e) {
+          console.error(`Failed to load cities for ${selectedProvince}:`, e);
+          setPhCitiesList([]);
+        }
+      } else {
         setPhCitiesList([]);
       }
-    } else {
-      setPhCitiesList([]);
-    }
-    setSelectedCity("");
-    setSelectedBarangay("");
+      setSelectedCity("");
+      setSelectedBarangay("");
+    };
+    loadCities();
   }, [selectedRegion, selectedProvince]);
 
   useEffect(() => {
-    if (selectedRegion && selectedProvince && selectedCity) {
-      try {
-        setPhBarangaysList(
-          barangay(selectedRegion, selectedProvince, selectedCity)
-        );
-      } catch (e) {
-        console.error(`Failed to load barangays for ${selectedCity}:`, e);
+    const loadBarangays = async () => {
+      if (selectedRegion && selectedProvince && selectedCity) {
+        try {
+          const { default: barangay } = await import("barangay");
+          setPhBarangaysList(
+            barangay(selectedRegion, selectedProvince, selectedCity)
+          );
+        } catch (e) {
+          console.error(`Failed to load barangays for ${selectedCity}:`, e);
+          setPhBarangaysList([]);
+        }
+      } else {
         setPhBarangaysList([]);
       }
-    } else {
-      setPhBarangaysList([]);
-    }
-    setSelectedBarangay("");
+      setSelectedBarangay("");
+    };
+    loadBarangays();
   }, [selectedRegion, selectedProvince, selectedCity]);
 
-  // --- Form Handlers ---
   const resetForm = () => {
     setPropertyName("");
     setNumberOfUnits("");
-    // --- MODIFIED ---
     setOverallSqm("");
     setTotalUnitSqm("");
     setStreet("");
@@ -213,12 +315,19 @@ const AddPropertyModal = ({ isOpen, onClose, onSuccess }) => {
     setStepError("");
     setCurrentStep(1);
 
-    const philippines = Country.getCountryByCode("PH");
-    if (philippines) {
-      setSelectedCountry(philippines);
-    } else {
-      setSelectedCountry(null);
-    }
+    import("country-state-city")
+      .then(({ Country }) => {
+        const philippines = Country.getCountryByCode("PH");
+        if (philippines) {
+          setSelectedCountry(philippines);
+        } else {
+          setSelectedCountry(null);
+        }
+      })
+      .catch((err) => {
+        console.error("Failed to load country data for reset:", err);
+        setSelectedCountry(null);
+      });
   };
 
   const handleClose = () => {
@@ -229,13 +338,11 @@ const AddPropertyModal = ({ isOpen, onClose, onSuccess }) => {
   const handleNext = () => {
     setStepError("");
     let isValid = true;
-
     if (currentStep === 1) {
       if (!propertyName.trim()) {
         setStepError("Property Name is a required field.");
         isValid = false;
       }
-      // --- NEW VALIDATION ---
       if (unusedSqm < 0) {
         setStepError(
           "Total Unit SQM cannot be greater than the Overall Property SQM."
@@ -243,7 +350,6 @@ const AddPropertyModal = ({ isOpen, onClose, onSuccess }) => {
         isValid = false;
       }
     }
-
     if (currentStep === 2) {
       if (!selectedCountry) {
         setStepError("Country is a required field.");
@@ -273,7 +379,6 @@ const AddPropertyModal = ({ isOpen, onClose, onSuccess }) => {
         isValid = false;
       }
     }
-
     if (isValid) {
       if (currentStep < steps.length) {
         setCurrentStep(currentStep + 1);
@@ -291,29 +396,23 @@ const AddPropertyModal = ({ isOpen, onClose, onSuccess }) => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (currentStep !== steps.length) return;
-
     if (unusedSqm < 0) {
       setError("Cannot save: Total Unit SQM exceeds Overall Property SQM.");
       return;
     }
-
     if (!userProfile?.id) {
       setError("You must be logged in to add a property.");
       return;
     }
-
     setIsSubmitting(true);
     setError("");
     setStepError("");
-
     try {
-      // ... (file upload logic is unchanged)
       const uploadedLicenseFiles = await uploadFiles(
         businessLicenses,
         userProfile.id
       );
       const uploadedCertFiles = await uploadFiles(certificates, userProfile.id);
-
       const licenseData = {
         files: uploadedLicenseFiles,
         description: licenseDescription.trim(),
@@ -322,19 +421,14 @@ const AddPropertyModal = ({ isOpen, onClose, onSuccess }) => {
         files: uploadedCertFiles,
         description: certificateDescription.trim(),
       };
-
       const stateName =
         states.find((s) => s.isoCode === selectedState)?.name || "";
-
-      // --- MODIFIED: Prepare data for Supabase insert ---
       const propertyData = {
         created_by: userProfile.id,
         last_edited_by: userProfile.id,
         property_name: propertyName.trim(),
         number_of_units: numberOfUnits ? parseInt(numberOfUnits, 10) : null,
-        // The total area for units (used by UnitModal)
         total_sqm: totalUnitSqm ? parseFloat(totalUnitSqm) : null,
-        // The new field for the overall property size
         overall_sqm: overallSqm ? parseFloat(overallSqm) : null,
         address_country: selectedCountry?.name,
         address_country_iso: selectedCountry?.isoCode,
@@ -354,13 +448,10 @@ const AddPropertyModal = ({ isOpen, onClose, onSuccess }) => {
         business_licenses: licenseData,
         certificates_of_registration: certificateData,
       };
-
       const { error: insertError } = await supabase
         .from("properties")
         .insert([propertyData]);
-
       if (insertError) throw insertError;
-
       onSuccess();
       handleClose();
     } catch (err) {
@@ -374,7 +465,7 @@ const AddPropertyModal = ({ isOpen, onClose, onSuccess }) => {
   return (
     <Transition appear show={isOpen} as={Fragment}>
       <Dialog as="div" className="relative z-50" onClose={handleClose}>
-        {/* ... (Transition and Dialog setup is unchanged) ... */}
+        {/* The entire JSX for the modal remains unchanged */}
         <TransitionChild
           as={Fragment}
           enter="ease-out duration-300"
@@ -398,7 +489,6 @@ const AddPropertyModal = ({ isOpen, onClose, onSuccess }) => {
               leaveTo="opacity-0 scale-95"
             >
               <DialogPanel className="w-full max-w-7xl transform overflow-hidden rounded-2xl bg-white p-6 text-left align-middle shadow-xl transition-all">
-                {/* ... (Dialog Title and close button are unchanged) ... */}
                 <div className="flex items-center justify-between">
                   <DialogTitle
                     as="h3"
@@ -423,7 +513,7 @@ const AddPropertyModal = ({ isOpen, onClose, onSuccess }) => {
 
                 <form onSubmit={handleSubmit} className="mt-6">
                   <div className="min-h-[350px]">
-                    {/* --- Step 1: Property Details (MODIFIED) --- */}
+                    {/* --- Step 1: Property Details --- */}
                     {currentStep === 1 && (
                       <div className="space-y-4 animate-fadeIn">
                         <h4 className="text-lg font-semibold text-gray-800 border-b pb-2">
@@ -495,7 +585,6 @@ const AddPropertyModal = ({ isOpen, onClose, onSuccess }) => {
                           </div>
                         </div>
 
-                        {/* --- NEW: AUTOMATIC CALCULATION DISPLAY --- */}
                         {overallSqm > 0 && totalUnitSqm > 0 && (
                           <div
                             className={`mt-6 p-4 rounded-lg text-sm ${
@@ -549,11 +638,14 @@ const AddPropertyModal = ({ isOpen, onClose, onSuccess }) => {
                             <FormInputGroup label="Country*">
                               <select
                                 value={selectedCountry?.isoCode || ""}
-                                onChange={(e) =>
+                                onChange={async (e) => {
+                                  const { Country } = await import(
+                                    "country-state-city"
+                                  );
                                   setSelectedCountry(
                                     Country.getCountryByCode(e.target.value)
-                                  )
-                                }
+                                  );
+                                }}
                                 className={selectStyles}
                                 required
                               >
@@ -708,7 +800,6 @@ const AddPropertyModal = ({ isOpen, onClose, onSuccess }) => {
                         </div>
                       </div>
                     )}
-
                     {/* --- Step 3: Documents --- */}
                     {currentStep === 3 && (
                       <div className="space-y-4 animate-fadeIn">
@@ -739,14 +830,12 @@ const AddPropertyModal = ({ isOpen, onClose, onSuccess }) => {
                     )}
                   </div>
 
-                  {/* --- Error Display --- */}
                   {(error || stepError) && (
                     <p className="mt-4 text-sm font-medium text-red-600 bg-red-50 p-3 rounded-lg">
                       {error || stepError}
                     </p>
                   )}
 
-                  {/* --- Form Actions / Navigation --- */}
                   <div className="flex justify-center gap-4 pt-6 mt-8 sm:justify-end sm:gap-3">
                     {currentStep > 1 && (
                       <button

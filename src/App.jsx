@@ -1,22 +1,26 @@
-// src/App.tsx
-import { useEffect } from "react";
+import { Suspense, lazy } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import LoginPage from "./pages/Auth/Login";
-// NOTE: These are likely unused now, can be cleaned up later if you wish
-
-import AdminUserManagement from "./pages/Admin/AdminUserManagement";
 import { useAuthStore } from "./store/useAuthStore";
 import AppLayout from "./components/layout/AppLayout";
-
 import LoadingSpinner from "./components/ui/LoadingSpinner";
-import WelcomeMessage from "./pages/Admin/WelcomeMessage";
-import Units from "./pages/Admin/Units";
 
-// Assuming these paths are correct
-import SettingsGeneral from "./components/Settings/SettingsGeneral";
-import SettingsPropertyData from "./components/Settings/SettingsPropertyData";
-import SettingsUserManagement from "./components/Settings/SettingsUserManagement";
-import Properties from "./pages/Admin/Properties";
+// Lazy load all major pages
+const LoginPage = lazy(() => import("./pages/Auth/Login"));
+const WelcomeMessage = lazy(() => import("./pages/Admin/WelcomeMessage"));
+const Units = lazy(() => import("./pages/Admin/Units"));
+const Properties = lazy(() => import("./pages/Admin/Properties"));
+const AdminUserManagement = lazy(() =>
+  import("./pages/Admin/AdminUserManagement")
+);
+const SettingsGeneral = lazy(() =>
+  import("./components/Settings/SettingsGeneral")
+);
+const SettingsPropertyData = lazy(() =>
+  import("./components/Settings/SettingsPropertyData")
+);
+const SettingsUserManagement = lazy(() =>
+  import("./components/Settings/SettingsUserManagement")
+);
 
 function App() {
   const { session, loading, isAdmin } = useAuthStore();
@@ -27,55 +31,54 @@ function App() {
 
   return (
     <BrowserRouter>
-      <Routes>
-        <Route
-          path="/login"
-          element={!session ? <LoginPage /> : <Navigate to="/" />}
-        />
+      <Suspense fallback={<LoadingSpinner />}>
+        <Routes>
+          <Route
+            path="/login"
+            element={!session ? <LoginPage /> : <Navigate to="/" />}
+          />
 
-        {/* Protected Routes */}
-        <Route
-          path="/*"
-          element={
-            session ? (
-              <AppLayout>
-                <Routes>
-                  <Route path="/" element={<WelcomeMessage />} />
-                  <Route path="/units" element={<Units />} />
-                  <Route path="/properties" element={<Properties />} />
+          <Route
+            path="/*"
+            element={
+              session ? (
+                <AppLayout>
+                  <Routes>
+                    <Route path="/" element={<WelcomeMessage />} />
+                    <Route path="/units" element={<Units />} />
+                    <Route path="/properties" element={<Properties />} />
 
-                  {/* === FIX: THE ROUTES NOW HAVE THE CORRECT FULL PATH === */}
-                  {isAdmin && (
-                    <>
-                      <Route
-                        path="/settings/general"
-                        element={<SettingsGeneral />}
-                      />
-                      <Route
-                        path="/settings/property-data"
-                        element={<SettingsPropertyData />}
-                      />
-                      <Route
-                        path="/settings/user-management"
-                        element={<SettingsUserManagement />}
-                      />
-                    </>
-                  )}
-                  {/* This is the old route, now handled by /settings/user-management */}
+                    {isAdmin && (
+                      <>
+                        <Route
+                          path="/settings/general"
+                          element={<SettingsGeneral />}
+                        />
+                        <Route
+                          path="/settings/property-data"
+                          element={<SettingsPropertyData />}
+                        />
+                        <Route
+                          path="/settings/user-management"
+                          element={<SettingsUserManagement />}
+                        />
+                        <Route
+                          path="/users"
+                          element={<AdminUserManagement />}
+                        />
+                      </>
+                    )}
 
-                  {isAdmin && (
-                    <Route path="/users" element={<AdminUserManagement />} />
-                  )}
-                  {/* FIX: Removed the incorrect index route that was here */}
-                  <Route path="*" element={<Navigate to="/" />} />
-                </Routes>
-              </AppLayout>
-            ) : (
-              <Navigate to="/login" />
-            )
-          }
-        />
-      </Routes>
+                    <Route path="*" element={<Navigate to="/" />} />
+                  </Routes>
+                </AppLayout>
+              ) : (
+                <Navigate to="/login" />
+              )
+            }
+          />
+        </Routes>
+      </Suspense>
     </BrowserRouter>
   );
 }

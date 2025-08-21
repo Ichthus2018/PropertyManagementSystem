@@ -1,25 +1,34 @@
 // src/pages/Properties.jsx
-
-import { useState } from "react";
+import { useState, Suspense, lazy } from "react";
 import { useSupabaseQuery } from "../../hooks/useSupabaseQuery";
 import { useAuthStore } from "../../store/useAuthStore";
 import supabase from "../../lib/supabase";
 
-// Import common reusable components
+// Lightweight reusable components
 import PageHeader from "../../components/ui/common/PageHeader";
 import SearchInput from "../../components/ui/common/SearchInput";
 import DataTable from "../../components/ui/common/DataTable";
+import LoadingSpinner from "../../components/ui/LoadingSpinner"; // fallback for lazy components
 
-// Import NEW feature-specific components
-import PropertiesTable from "../../components/pages/properties/PropertiesTable";
-import PropertyCard from "../../components/pages/properties/PropertyCard";
+// Lazy-load heavy feature components
+const PropertiesTable = lazy(() =>
+  import("../../components/pages/properties/PropertiesTable")
+);
+const PropertyCard = lazy(() =>
+  import("../../components/pages/properties/PropertyCard")
+);
 
-// Import Modals
-import AddPropertyModal from "../../components/modals/PropertyModal/AddPropertyModal";
-import EditPropertyModal from "../../components/modals/PropertyModal/EditPropertyModal";
-import DeletePropertyModal from "../../components/modals/PropertyModal/DeletePropertyModal";
+// Lazy-load modals
+const AddPropertyModal = lazy(() =>
+  import("../../components/modals/PropertyModal/AddPropertyModal")
+);
+const EditPropertyModal = lazy(() =>
+  import("../../components/modals/PropertyModal/EditPropertyModal")
+);
+const DeletePropertyModal = lazy(() =>
+  import("../../components/modals/PropertyModal/DeletePropertyModal")
+);
 
-// Helper function remains here as it's part of the page's logic, passed down as a prop
 const formatAddress = (p) => {
   const addressParts =
     p.address_country_iso === "PH"
@@ -41,7 +50,6 @@ const formatAddress = (p) => {
 };
 
 const Properties = () => {
-  // --- State for modals and actions (No changes here) ---
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
@@ -49,7 +57,6 @@ const Properties = () => {
   const [selectedProperty, setSelectedProperty] = useState(null);
   const userProfile = useAuthStore((state) => state.userProfile);
 
-  // --- Data fetching and management hook (No changes here) ---
   const {
     data: properties,
     totalCount,
@@ -72,7 +79,6 @@ const Properties = () => {
     initialPageSize: 5,
   });
 
-  // --- Action Handlers (No changes here) ---
   const handleAddSuccess = () => {
     setIsAddModalOpen(false);
     mutate();
@@ -132,39 +138,12 @@ const Properties = () => {
     }
   };
 
-  // This helper stays here because it depends on the userProfile from the store
   const getCreatorDisplay = (property) => {
     if (!userProfile) return "Loading...";
     return property.created_by === userProfile.id
       ? "You"
       : `User ${property.created_by.substring(0, 8)}...`;
   };
-
-  // --- NEW: Render functions now simply call the dedicated components ---
-
-  const renderDesktopTable = (data) => (
-    <PropertiesTable
-      properties={data}
-      onEdit={openEditModal}
-      onDelete={openDeleteModal}
-      formatAddress={formatAddress}
-      getCreatorDisplay={getCreatorDisplay}
-    />
-  );
-
-  const renderMobileCards = (data) => (
-    <div className="space-y-4 p-4">
-      {data.map((p) => (
-        <PropertyCard
-          key={p.id}
-          property={p}
-          onEdit={() => openEditModal(p)}
-          onDelete={() => openDeleteModal(p)}
-          formatAddress={formatAddress}
-        />
-      ))}
-    </div>
-  );
 
   return (
     <>
@@ -195,37 +174,62 @@ const Properties = () => {
           onPageChange={setCurrentPage}
           pageSize={pageSize}
           activeSearchTerm={activeSearchTerm}
-          renderTable={renderDesktopTable}
-          renderCards={renderMobileCards}
+          renderTable={(data) => (
+            <Suspense fallback={<LoadingSpinner />}>
+              <PropertiesTable
+                properties={data}
+                onEdit={openEditModal}
+                onDelete={openDeleteModal}
+                formatAddress={formatAddress}
+                getCreatorDisplay={getCreatorDisplay}
+              />
+            </Suspense>
+          )}
+          renderCards={(data) => (
+            <Suspense fallback={<LoadingSpinner />}>
+              <div className="space-y-4 p-4">
+                {data.map((p) => (
+                  <PropertyCard
+                    key={p.id}
+                    property={p}
+                    onEdit={() => openEditModal(p)}
+                    onDelete={() => openDeleteModal(p)}
+                    formatAddress={formatAddress}
+                  />
+                ))}
+              </div>
+            </Suspense>
+          )}
           emptyStateTitle="No Properties Yet"
           emptyStateDescription='Click "Add New Property" to get started.'
         />
       </div>
 
-      {/* --- Modals (No changes here) --- */}
-      <AddPropertyModal
-        isOpen={isAddModalOpen}
-        onClose={() => setIsAddModalOpen(false)}
-        onSuccess={handleAddSuccess}
-      />
+      <Suspense fallback={null}>
+        <AddPropertyModal
+          isOpen={isAddModalOpen}
+          onClose={() => setIsAddModalOpen(false)}
+          onSuccess={handleAddSuccess}
+        />
 
-      {selectedProperty && (
-        <>
-          <EditPropertyModal
-            isOpen={isEditModalOpen}
-            onClose={() => setIsEditModalOpen(false)}
-            onSuccess={handleEditSuccess}
-            property={selectedProperty}
-          />
-          <DeletePropertyModal
-            isOpen={isDeleteModalOpen}
-            onClose={() => setIsDeleteModalOpen(false)}
-            onConfirm={handleConfirmDelete}
-            isDeleting={isProcessing}
-            itemName={selectedProperty.property_name}
-          />
-        </>
-      )}
+        {selectedProperty && (
+          <>
+            <EditPropertyModal
+              isOpen={isEditModalOpen}
+              onClose={() => setIsEditModalOpen(false)}
+              onSuccess={handleEditSuccess}
+              property={selectedProperty}
+            />
+            <DeletePropertyModal
+              isOpen={isDeleteModalOpen}
+              onClose={() => setIsDeleteModalOpen(false)}
+              onConfirm={handleConfirmDelete}
+              isDeleting={isProcessing}
+              itemName={selectedProperty.property_name}
+            />
+          </>
+        )}
+      </Suspense>
     </>
   );
 };
