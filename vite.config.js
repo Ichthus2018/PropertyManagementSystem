@@ -1,11 +1,10 @@
-// component 2 (vite.config.js) - OPTIMIZED
-
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react-swc";
 import tailwindcss from "@tailwindcss/vite";
 import { visualizer } from "rollup-plugin-visualizer";
 
 export default defineConfig({
+  base: "/PropertyManagementSystem/", // IMPORTANT for GitHub Pages
   plugins: [
     react(),
     tailwindcss(),
@@ -17,18 +16,17 @@ export default defineConfig({
     }),
   ],
   build: {
+    outDir: "docs", // build directly to docs/
     sourcemap: false,
     rollupOptions: {
       output: {
         manualChunks: {
-          // Keep your existing chunks
           vendor: [
             "react",
             "react-dom",
             "react-router-dom",
             "@supabase/supabase-js",
           ],
-          // Add new chunks for specific libraries
           ui: ["react-icons", "react-responsive-carousel"],
         },
       },

@@ -9,6 +9,7 @@ import PageHeader from "../../components/ui/common/PageHeader";
 import SearchInput from "../../components/ui/common/SearchInput";
 import DataTable from "../../components/ui/common/DataTable";
 import LoadingSpinner from "../../components/ui/LoadingSpinner"; // 2. Import a fallback component
+import FacilityPage from "./FacilityPage";
 
 // 3. Lazy-load the heavier, feature-specific components
 const UnitsTable = lazy(() =>
@@ -199,6 +200,7 @@ const Units = () => {
           </>
         )}
       </Suspense>
+      <FacilityPage />
     </>
   );
 };
