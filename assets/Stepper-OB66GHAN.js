@@ -1,0 +1,9 @@
+import{j as e}from"./index-Bu7T6usM.js";import{b as o}from"./vendor-CltuolhD.js";const m=({currentStep:l,steps:s})=>{if(!s||s.length===0)return null;const r=s.length>1?(l-1)/(s.length-1)*100:l===1?100:0;return e.jsxs(e.Fragment,{children:[e.jsxs("div",{className:"my-8 flex items-center space-x-3 md:hidden",children:[e.jsx("div",{className:"flex-1 rounded-full bg-gray-200 h-3",children:e.jsx("div",{className:"h-3 rounded-full bg-orange-600 transition-all duration-500",style:{width:`${r}%`}})}),e.jsxs("span",{className:"text-sm font-medium text-gray-800",children:[l," / ",s.length]})]}),e.jsx("div",{className:"hidden md:flex items-center w-full my-8",children:e.jsx("div",{className:"flex items-center w-full mb-8 px-2 mt-6 ",children:s.map((a,t)=>e.jsxs(o.Fragment,{children:[e.jsxs("div",{className:"flex flex-col items-center text-center w-32",children:[e.jsx("div",{className:`w-12 h-12 rounded-full flex items-center justify-center text-white font-bold text-xl shadow-lg transition-all duration-300
+                ${t+1<l?"bg-gradient-to-br from-green-500 to-emerald-600":""}
+                ${t+1===l?"bg-gradient-to-br from-orange-500 to-red-600 scale-110":""}
+                ${t+1>l?"bg-gray-300":""}
+              `,children:t+1<l?e.jsx("svg",{xmlns:"http://www.w3.org/2000/svg",fill:"none",viewBox:"0 0 24 24",strokeWidth:2.5,stroke:"currentColor",className:"w-6 h-6",children:e.jsx("path",{strokeLinecap:"round",strokeLinejoin:"round",d:"m4.5 12.75 6 6 9-13.5"})}):t+1}),e.jsx("p",{className:`mt-2 text-sm font-semibold transition-all duration-300
+                ${t+1<=l?"text-gray-800":"text-gray-400"}
+              `,children:a})]}),t<s.length-1&&e.jsx("div",{className:`flex-auto h-1 transition-colors duration-500
+                ${t+1<l?"bg-gradient-to-r from-green-500 to-emerald-600":"bg-gray-200"}
+              `})]},t))})})]})};export{m as S};
