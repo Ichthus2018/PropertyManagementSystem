@@ -1,0 +1,1 @@
+import{j as e}from"./index-VS4hTV8j.js";import"./vendor-C5zIUBfc.js";import"./ui-DPhHsU_z.js";function a(){return e.jsxs("div",{children:[e.jsx("h1",{className:"text-2xl font-bold text-gray-800",children:"General Settings"}),e.jsx("p",{className:"mt-2 text-gray-600",children:"Manage your company name, logo, and other general options here."})]})}export{a as default};
