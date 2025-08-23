@@ -1,1 +1,0 @@
-import{j as e}from"./index-ChuUIRBG.js";import"./vendor-C5zIUBfc.js";import"./ui-DPhHsU_z.js";function a(){return e.jsxs("div",{children:[e.jsx("h1",{className:"text-2xl font-bold text-gray-800",children:"User Management"}),e.jsx("p",{className:"mt-2 text-gray-600",children:"Add or remove staff who can use the system."})]})}export{a as default};

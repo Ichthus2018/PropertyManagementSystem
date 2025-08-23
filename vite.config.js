@@ -4,7 +4,8 @@ import tailwindcss from "@tailwindcss/vite";
 import { visualizer } from "rollup-plugin-visualizer";
 
 export default defineConfig({
-  base: "/PropertyManagementSystem/", // IMPORTANT for GitHub Pages
+  base: "/",
+  // base: "/PropertyManagementSystem/", // IMPORTANT for GitHub Pages
   plugins: [
     react(),
     tailwindcss(),
@@ -16,7 +17,7 @@ export default defineConfig({
     }),
   ],
   build: {
-    outDir: "docs", // build directly to docs/
+    outDir: "dist", // build directly to docs/
     sourcemap: false,
     rollupOptions: {
       output: {

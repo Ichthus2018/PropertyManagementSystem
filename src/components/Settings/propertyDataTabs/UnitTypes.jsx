@@ -43,7 +43,7 @@ const UnitTypes = () => {
     activeSearchTerm,
     handleSearch,
     clearSearch, // Renamed from handleClearSearch for consistency with the hook
-  } = useSupabaseQuery({
+  } = {
     tableName: "unit_types",
     selectQuery: `
       id,
@@ -53,7 +53,7 @@ const UnitTypes = () => {
     `,
     searchColumn: "unit_type",
     initialPageSize: 5,
-  });
+  };
 
   // --- No changes needed for this effect ---
   useEffect(() => {
