@@ -1,0 +1,1 @@
+import{j as e}from"./index-Bu7T6usM.js";import"./vendor-CltuolhD.js";import"./ui-BZV_7ZZi.js";const m=()=>e.jsx("div",{children:e.jsx(e.Fragment,{children:"AdminUserManagement"})});export{m as default};
