@@ -1,68 +1,11 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { XMarkIcon, ArrowUpTrayIcon } from "@heroicons/react/20/solid";
 import { v4 as uuidv4 } from "uuid";
 import { PhotoProvider, PhotoView } from "react-photo-view";
 import "react-photo-view/dist/react-photo-view.css";
 
-/**
- * Converts an image file to AVIF format using the browser's Canvas API.
- * @param {File} file The original image file.
- * @param {number} quality The quality of the output AVIF image (0.0 to 1.0).
- * @returns {Promise<File>} A promise that resolves with the new AVIF File object.
- */
-const convertToAVIF = (file, quality = 0.8) => {
-  return new Promise((resolve, reject) => {
-    // Create an object URL for the source file
-    const objectUrl = URL.createObjectURL(file);
-    const img = new Image();
-
-    img.onload = () => {
-      // Create a canvas element
-      const canvas = document.createElement("canvas");
-      canvas.width = img.naturalWidth;
-      canvas.height = img.naturalHeight;
-      const ctx = canvas.getContext("2d");
-
-      // Draw the image onto the canvas
-      ctx.drawImage(img, 0, 0);
-
-      // We no longer need the object URL
-      URL.revokeObjectURL(objectUrl);
-
-      // Convert the canvas content to an AVIF blob
-      canvas.toBlob(
-        (blob) => {
-          if (!blob) {
-            return reject(
-              new Error(
-                "Canvas to Blob conversion failed. Your browser may not support AVIF encoding."
-              )
-            );
-          }
-          // Create a new file name with the .avif extension
-          const baseName =
-            file.name.substring(0, file.name.lastIndexOf(".")) || file.name;
-          const newFileName = `${baseName}.avif`;
-
-          // Create a new File object from the blob
-          const avifFile = new File([blob], newFileName, {
-            type: "image/avif",
-          });
-          resolve(avifFile);
-        },
-        "image/avif", // Specify the desired MIME type
-        quality // Specify the desired quality
-      );
-    };
-
-    img.onerror = (error) => {
-      URL.revokeObjectURL(objectUrl);
-      reject(error);
-    };
-
-    img.src = objectUrl;
-  });
-};
+// --- CHANGE: The entire client-side conversion function is removed ---
+// const convertToAVIF = (...) => { ... };
 
 const ImageUploader = ({
   label,
@@ -73,46 +16,69 @@ const ImageUploader = ({
   maxFiles = 5,
 }) => {
   const [dragActive, setDragActive] = useState(false);
-  const [isConverting, setIsConverting] = useState(false); // Optional: for loading state
+  // --- CHANGE: isConverting state is no longer needed ---
+  // const [isConverting, setIsConverting] = useState(false);
   const inputRef = useRef(null);
 
+  // Cleanup object URLs on component unmount to prevent memory leaks
+  useEffect(() => {
+    return () => {
+      files.forEach((file) => {
+        if (file.preview) {
+          URL.revokeObjectURL(file.preview);
+        }
+      });
+    };
+  }, [files]);
+
   const handleFileChange = async (newFiles) => {
-    if (newFiles && newFiles.length > 0) {
-      const filesToProcess = Array.from(newFiles).slice(
-        0,
-        maxFiles - files.length
+    if (!newFiles || newFiles.length === 0) return;
+
+    const MAX_FILE_SIZE_MB = 5;
+    const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
+    const incomingFiles = Array.from(newFiles);
+
+    const validFiles = incomingFiles.filter(
+      (file) => file.size <= MAX_FILE_SIZE_BYTES
+    );
+    const oversizedFiles = incomingFiles.filter(
+      (file) => file.size > MAX_FILE_SIZE_BYTES
+    );
+
+    if (oversizedFiles.length > 0) {
+      const oversizedFileNames = oversizedFiles.map((f) => f.name).join(", ");
+      alert(
+        `The following files are larger than ${MAX_FILE_SIZE_MB}MB and were not added:\n\n${oversizedFileNames}`
       );
+    }
 
-      if (filesToProcess.length === 0) return;
+    if (validFiles.length === 0) return;
 
-      setIsConverting(true); // Start loading/conversion indicator
+    const filesToProcess = validFiles.slice(0, maxFiles - files.length);
 
-      try {
-        // Create an array of conversion promises
-        const conversionPromises = filesToProcess.map((file) =>
-          convertToAVIF(file)
-        );
-
-        // Wait for all images to be converted
-        const convertedFiles = await Promise.all(conversionPromises);
-
-        const filesToAdd = convertedFiles.map((file) => ({
-          id: uuidv4(),
-          file: file,
-          preview: URL.createObjectURL(file),
-          source: "new",
-        }));
-
-        setFiles((prev) => [...prev, ...filesToAdd]);
-      } catch (error) {
-        console.error("Failed to convert one or more images:", error);
-        // You could show an error toast to the user here
+    if (filesToProcess.length === 0) {
+      if (validFiles.length > 0) {
         alert(
-          "An error occurred while converting an image to AVIF. Please try a different image or browser."
+          `You have reached the maximum of ${maxFiles} files. No new files were added.`
         );
-      } finally {
-        setIsConverting(false); // Stop loading/conversion indicator
       }
+      return;
+    }
+
+    // --- CHANGE: Simplified logic. No more conversion. ---
+    // We just package the original file for the parent component.
+    const filesToAdd = filesToProcess.map((file) => ({
+      id: uuidv4(),
+      file: file, // The 'file' property is now the original file (e.g., a JPG or PNG)
+      preview: URL.createObjectURL(file), // Create a preview from the original
+      source: "new",
+    }));
+
+    setFiles([...files, ...filesToAdd]);
+
+    // Clear the file input to allow re-selecting the same file later
+    if (inputRef.current) {
+      inputRef.current.value = "";
     }
   };
 
@@ -135,7 +101,7 @@ const ImageUploader = ({
     setFiles(files.filter((f) => f.id !== id));
   };
 
-  const isDisabled = files.length >= maxFiles || isConverting;
+  const isDisabled = files.length >= maxFiles; // No more isConverting
 
   return (
     <div className="space-y-4">
@@ -157,32 +123,23 @@ const ImageUploader = ({
           : "border-gray-300 hover:border-orange-500 hover:bg-orange-50/50"
       }`}
       >
-        {isConverting ? (
-          <p className="text-sm font-semibold text-gray-600">
-            Converting images...
-          </p>
-        ) : (
-          <>
-            <ArrowUpTrayIcon className="h-10 w-10 text-gray-400 group-hover:scale-105 transition" />
-            <p className="text-sm text-center text-gray-700 leading-tight">
-              <span className="font-semibold text-orange-600">
-                Tap to upload
-              </span>{" "}
-              or drag and drop
-            </p>
-            <p className="text-xs text-gray-500">
-              PNG, JPG, GIF will be converted to AVIF
-            </p>
-            <p className="text-xs text-gray-500">
-              {files.length} / {maxFiles} files added
-            </p>
-          </>
-        )}
+        <ArrowUpTrayIcon className="h-10 w-10 text-gray-400 group-hover:scale-105 transition" />
+        <p className="text-sm text-center text-gray-700 leading-tight">
+          <span className="font-semibold text-orange-600">Tap to upload</span>{" "}
+          or drag and drop
+        </p>
+        {/* --- CHANGE: Updated descriptive text --- */}
+        <p className="text-xs text-gray-500">
+          Images are automatically optimized for web.
+        </p>
+        <p className="text-xs text-gray-500">
+          {files.length} / {maxFiles} files added
+        </p>
         <input
           ref={inputRef}
           type="file"
           multiple
-          accept="image/png, image/jpeg, image/gif, image/webp, image/avif"
+          accept="image/png, image/jpeg, image/gif, image/webp"
           className="hidden"
           onChange={(e) => handleFileChange(e.target.files)}
           disabled={isDisabled}

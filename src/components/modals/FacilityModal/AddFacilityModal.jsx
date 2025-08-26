@@ -14,7 +14,6 @@ import {
   ExclamationTriangleIcon,
 } from "@heroicons/react/24/outline";
 import { v4 as uuidv4 } from "uuid";
-// import { supabase } from "../../../lib/supabase";
 import { useFacilityUnits } from "../../../hooks/useFacilityUnits";
 import ImageUploader from "../../ui/ImageUploader";
 import supabase from "../../../lib/supabase";

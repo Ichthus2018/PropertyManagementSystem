@@ -7,8 +7,6 @@ import {
 } from "@heroicons/react/20/solid";
 
 const UnitCard = ({ unit, onEdit, onDelete }) => {
-  console.log(unit);
-
   return (
     <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
       <div className="flex justify-between items-start">

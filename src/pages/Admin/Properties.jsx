@@ -30,24 +30,55 @@ const DeletePropertyModal = lazy(() =>
 );
 
 const formatAddress = (p) => {
-  const addressParts =
-    p.address_country_iso === "PH"
-      ? [
-          p.address_street,
-          p.address_barangay,
-          p.address_city_municipality,
-          p.address_province,
-          p.address_zip_code,
-          p.address_country,
-        ]
-      : [
-          p.address_street,
-          p.address_state,
-          p.address_zip_code,
-          p.address_country,
-        ];
-  return addressParts.filter(Boolean).join(", ") || "N/A";
+  // Guard clause: If there's no property object or street, return 'N/A'.
+  if (!p || !p.address_street) {
+    return "N/A";
+  }
+
+  let addressParts = [];
+
+  // Use a switch statement for scalability to other country formats
+  switch (p.address_country_iso) {
+    case "PH":
+      // Standard Philippine Address Format
+      addressParts = [
+        p.address_street,
+        p.address_barangay,
+        // Combine City and Province for a cleaner look
+        `${p.address_city_municipality}, ${p.address_province}`,
+        p.address_zip_code,
+        p.address_country,
+      ];
+      break;
+
+    // You can easily add more formats here in the future, for example:
+    // case "US":
+    //   addressParts = [
+    //     p.address_street,
+    //     `${p.address_city_municipality}, ${p.address_province} ${p.address_zip_code}`,
+    //     p.address_country,
+    //   ];
+    //   break;
+
+    default:
+      // A generic fallback format for any other country
+      addressParts = [
+        p.address_street,
+        p.address_city_municipality,
+        p.address_province,
+        p.address_zip_code,
+        p.address_country,
+      ];
+      break;
+  }
+
+  // Filter out any null, undefined, or empty parts and join them.
+  const formattedAddress = addressParts.filter(Boolean).join(", ");
+
+  // Return the final string, or "N/A" if it somehow ended up empty.
+  return formattedAddress || "N/A";
 };
+// --- ⬆️ END OF IMPROVED FUNCTION ⬆️ ---
 
 const Properties = () => {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -74,7 +105,8 @@ const Properties = () => {
     clearSearch,
   } = useSupabaseQuery({
     tableName: "properties",
-    selectQuery: `id, property_name, number_of_units, total_sqm, business_licenses, certificates_of_registration, created_by, address_country, address_country_iso, address_street, address_zip_code, address_state, address_state_iso, address_region, address_province, address_city_municipality, address_barangay, overall_sqm`,
+    // This query correctly includes the country fields needed by formatAddress
+    selectQuery: `id, property_name, number_of_units, total_sqm, business_licenses, certificates_of_registration, created_by, address_street, address_zip_code, address_region, address_province, address_city_municipality, address_barangay, address_country_iso, address_country, overall_sqm`,
     searchColumn: "property_name",
     initialPageSize: 5,
   });

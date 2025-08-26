@@ -1,4 +1,4 @@
-import { useState, useEffect, Fragment } from "react";
+import { useState, useEffect, Fragment, useReducer } from "react";
 import {
   Dialog,
   DialogPanel,
@@ -14,6 +14,7 @@ import { ChevronDownIcon } from "@heroicons/react/20/solid";
 import { IoMdClose } from "react-icons/io";
 import Stepper from "../../ui/common/Stepper";
 import axios from "axios";
+import LoadingSpinner from "../../ui/LoadingSpinner";
 
 // --- New Philippine Address API Functions ---
 const fetchAddressData = (jsonPathName) =>
@@ -21,9 +22,6 @@ const fetchAddressData = (jsonPathName) =>
     `https://isaacdarcilla.github.io/philippine-addresses/${jsonPathName}.json`
   );
 
-/**
- * @returns all regions
- */
 const getRegions = async () => {
   try {
     const response = await fetchAddressData("region");
@@ -39,10 +37,6 @@ const getRegions = async () => {
   }
 };
 
-/**
- * @param {string} regionCode
- * @returns all provinces based on region code parameter.
- */
 const getProvinces = async (regionCode) => {
   try {
     const response = await fetchAddressData("province");
@@ -60,10 +54,6 @@ const getProvinces = async (regionCode) => {
   }
 };
 
-/**
- * @param {string} provinceCode
- * @returns all cities based on province code parameter.
- */
 const getCities = async (provinceCode) => {
   try {
     const response = await fetchAddressData("city");
@@ -81,10 +71,6 @@ const getCities = async (provinceCode) => {
   }
 };
 
-/**
- * @param {string} cityCode
- * @returns all barangays based on city code parameter.
- */
 const getBarangays = async (cityCode) => {
   try {
     const response = await fetchAddressData("barangay");
@@ -101,9 +87,7 @@ const getBarangays = async (cityCode) => {
     throw e;
   }
 };
-// --- End of New Address Functions ---
 
-// --- Helper components and functions ---
 const FormInputGroup = ({ label, children, description }) => (
   <div>
     <label className="block mb-1.5 text-sm font-medium text-gray-700">
@@ -118,111 +102,29 @@ const inputStyles =
   "block w-full text-sm rounded-lg border-gray-300 bg-gray-50 p-2.5 text-gray-900 focus:border-orange-500 focus:ring-orange-500 disabled:cursor-not-allowed disabled:opacity-60";
 const selectStyles = `${inputStyles} appearance-none`;
 
-// --- IMAGE OPTIMIZATION: Helper functions for image conversion ---
-
-const changeFileExtension = (filename, newExtension) => {
-  const lastDot = filename.lastIndexOf(".");
-  const baseName = lastDot === -1 ? filename : filename.substring(0, lastDot);
-  return `${baseName}.${newExtension}`;
-};
-
-const convertImageToAvif = (file, options = { quality: 0.8 }) => {
-  return new Promise((resolve) => {
-    // Check if the browser can even create an AVIF.
-    const canvas = document.createElement("canvas");
-    if (
-      typeof canvas.toDataURL !== "function" ||
-      canvas.toDataURL("image/avif").indexOf("data:image/avif") < 0
-    ) {
-      console.warn(
-        "AVIF conversion not supported by this browser. Uploading original file."
-      );
-      resolve(file); // Fallback to original file
-      return;
-    }
-
-    const blobURL = URL.createObjectURL(file);
-    const img = new Image();
-
-    img.onload = () => {
-      canvas.width = img.width;
-      canvas.height = img.height;
-      const ctx = canvas.getContext("2d");
-      ctx.drawImage(img, 0, 0);
-
-      canvas.toBlob(
-        (blob) => {
-          URL.revokeObjectURL(blobURL); // Clean up memory
-          if (blob && blob.type === "image/avif") {
-            const newFileName = changeFileExtension(file.name, "avif");
-            const avifFile = new File([blob], newFileName, {
-              type: "image/avif",
-            });
-            console.log(
-              `Converted ${file.name} (${(file.size / 1024).toFixed(
-                2
-              )} KB) to ${avifFile.name} (${(avifFile.size / 1024).toFixed(
-                2
-              )} KB)`
-            );
-            resolve(avifFile);
-          } else {
-            // Fallback if conversion fails for any reason
-            resolve(file);
-          }
-        },
-        "image/avif",
-        options.quality
-      );
-    };
-
-    img.onerror = () => {
-      URL.revokeObjectURL(blobURL);
-      console.error(
-        "Could not load image for conversion. Uploading original file."
-      );
-      resolve(file); // Fallback to original file
-    };
-
-    img.src = blobURL;
-  });
-};
-
 // --- IMAGE OPTIMIZATION: Updated uploadFiles function ---
+// In AddPropertyModal.jsx
+
 const uploadFiles = async (files, userId) => {
-  if (!userId) {
-    throw new Error("User ID is required for uploading files.");
-  }
-  const uploadedFileData = [];
-  for (const item of files) {
-    if (item.source === "new" && item.file) {
-      let fileToUpload = item.file;
+  if (!userId) throw new Error("User ID is required for uploading files.");
 
-      // Check if the file is an image and convert it to AVIF if possible
-      if (item.file.type.startsWith("image/")) {
-        try {
-          fileToUpload = await convertImageToAvif(item.file);
-        } catch (conversionError) {
-          console.error(
-            "Image conversion failed, uploading original:",
-            conversionError
-          );
-          fileToUpload = item.file; // Ensure fallback on error
-        }
-      }
-
-      // The filePath uses the name of the file being uploaded (which might now be .avif)
+  const uploadPromises = files
+    .filter((item) => item.source === "new" && item.file)
+    .map(async (item) => {
+      // --- CHANGE: item.file is now the ORIGINAL file, not a converted AVIF ---
+      const fileToUpload = item.file;
       const filePath = `user_${userId}/${uuidv4()}-${fileToUpload.name}`;
 
       const { error: uploadError } = await supabase.storage
         .from("property-documents")
-        .upload(filePath, fileToUpload); // Use the (potentially converted) file
+        .upload(filePath, fileToUpload);
 
       if (uploadError) {
         console.error("Supabase upload error:", uploadError);
         throw new Error(`Failed to upload ${fileToUpload.name}.`);
       }
 
+      // We get the public URL of the original, high-quality file.
       const { data } = supabase.storage
         .from("property-documents")
         .getPublicUrl(filePath);
@@ -231,202 +133,327 @@ const uploadFiles = async (files, userId) => {
         throw new Error(`Could not get public URL for ${fileToUpload.name}.`);
       }
 
-      uploadedFileData.push({ url: data.publicUrl, path: filePath });
-    }
-  }
-  return uploadedFileData;
+      return { url: data.publicUrl, path: filePath };
+    });
+
+  return Promise.all(uploadPromises);
 };
 
 const steps = ["Property Details", "Location", "Documents"];
 
+// --- Reducer for State Management ---
+const initialState = {
+  propertyDetails: {
+    propertyName: "",
+    numberOfUnits: "",
+    overallSqm: "",
+    totalUnitSqm: "",
+  },
+  location: {
+    street: "",
+    zipCode: "",
+    regions: { status: "idle", data: [], error: null },
+    provinces: { status: "idle", data: [], error: null },
+    cities: { status: "idle", data: [], error: null },
+    barangays: { status: "idle", data: [], error: null },
+    selectedRegionCode: "",
+    selectedProvinceCode: "",
+    selectedCityCode: "",
+    selectedBarangayCode: "",
+  },
+  documents: {
+    businessLicenses: [],
+    certificates: [],
+    licenseDescription: "",
+    certificateDescription: "",
+  },
+  ui: {
+    currentStep: 1,
+    isSubmitting: false,
+    error: "",
+    stepError: "",
+  },
+};
+
+function formReducer(state, action) {
+  switch (action.type) {
+    // Generic field update for property details
+    case "SET_PROPERTY_DETAIL":
+      return {
+        ...state,
+        propertyDetails: {
+          ...state.propertyDetails,
+          [action.field]: action.payload,
+        },
+      };
+
+    // Location selection handlers that reset dependent fields
+    case "SET_REGION":
+      return {
+        ...state,
+        location: {
+          ...state.location,
+          selectedRegionCode: action.payload,
+          selectedProvinceCode: "",
+          selectedCityCode: "",
+          selectedBarangayCode: "",
+          provinces: { ...initialState.location.provinces, status: "loading" },
+          cities: initialState.location.cities,
+          barangays: initialState.location.barangays,
+        },
+      };
+    case "SET_PROVINCE":
+      return {
+        ...state,
+        location: {
+          ...state.location,
+          selectedProvinceCode: action.payload,
+          selectedCityCode: "",
+          selectedBarangayCode: "",
+          cities: { ...initialState.location.cities, status: "loading" },
+          barangays: initialState.location.barangays,
+        },
+      };
+    case "SET_CITY":
+      return {
+        ...state,
+        location: {
+          ...state.location,
+          selectedCityCode: action.payload,
+          selectedBarangayCode: "",
+          barangays: { ...initialState.location.barangays, status: "loading" },
+        },
+      };
+    case "SET_BARANGAY":
+      return {
+        ...state,
+        location: { ...state.location, selectedBarangayCode: action.payload },
+      };
+
+    // Generic location text field update
+    case "SET_LOCATION_FIELD":
+      return {
+        ...state,
+        location: { ...state.location, [action.field]: action.payload },
+      };
+
+    // Handlers for async location data fetching
+    case "FETCH_REGIONS_SUCCESS":
+      return {
+        ...state,
+        location: {
+          ...state.location,
+          regions: { status: "success", data: action.payload },
+        },
+      };
+    case "FETCH_PROVINCES_SUCCESS":
+      return {
+        ...state,
+        location: {
+          ...state.location,
+          provinces: { status: "success", data: action.payload },
+        },
+      };
+    case "FETCH_CITIES_SUCCESS":
+      return {
+        ...state,
+        location: {
+          ...state.location,
+          cities: { status: "success", data: action.payload },
+        },
+      };
+    case "FETCH_BARANGAYS_SUCCESS":
+      return {
+        ...state,
+        location: {
+          ...state.location,
+          barangays: { status: "success", data: action.payload },
+        },
+      };
+    case "FETCH_LOCATION_ERROR":
+      console.error(`Error fetching ${action.level}:`, action.error);
+      return {
+        ...state,
+        location: {
+          ...state.location,
+          [action.level]: { status: "error", data: [], error: action.error },
+        },
+      };
+
+    // Document handlers
+    case "SET_DOCUMENTS":
+      return {
+        ...state,
+        documents: { ...state.documents, [action.field]: action.payload },
+      };
+
+    // UI state handlers
+    case "SET_STEP":
+      return {
+        ...state,
+        ui: { ...state.ui, currentStep: action.payload, stepError: "" },
+      };
+    case "SET_SUBMITTING":
+      return { ...state, ui: { ...state.ui, isSubmitting: action.payload } };
+    case "SET_ERROR":
+      return {
+        ...state,
+        ui: { ...state.ui, error: action.payload, stepError: "" },
+      };
+    case "SET_STEP_ERROR":
+      return {
+        ...state,
+        ui: { ...state.ui, stepError: action.payload, error: "" },
+      };
+
+    case "RESET_FORM":
+      return {
+        ...initialState,
+        location: { ...initialState.location, regions: state.location.regions },
+      }; // Keep regions data on reset
+
+    default:
+      throw new Error(`Unhandled action type: ${action.type}`);
+  }
+}
+
 // --- Main Modal Component ---
 const AddPropertyModal = ({ isOpen, onClose, onSuccess }) => {
-  const [currentStep, setCurrentStep] = useState(1);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [error, setError] = useState("");
-  const [stepError, setStepError] = useState("");
+  const [state, dispatch] = useReducer(formReducer, initialState);
   const userProfile = useAuthStore((state) => state.userProfile);
 
-  // Form State
-  const [propertyName, setPropertyName] = useState("");
-  const [numberOfUnits, setNumberOfUnits] = useState("");
-  const [overallSqm, setOverallSqm] = useState("");
-  const [totalUnitSqm, setTotalUnitSqm] = useState("");
-  const [street, setStreet] = useState("");
-  const [zipCode, setZipCode] = useState("");
-
-  // Location State (Philippines Only) - Stores arrays of objects
-  const [phRegionsList, setPhRegionsList] = useState([]);
-  const [phProvincesList, setPhProvincesList] = useState([]);
-  const [phCitiesList, setPhCitiesList] = useState([]);
-  const [phBarangaysList, setPhBarangaysList] = useState([]);
-
-  // Location State - Stores the selected CODE for each level
-  const [selectedRegionCode, setSelectedRegionCode] = useState("");
-  const [selectedProvinceCode, setSelectedProvinceCode] = useState("");
-  const [selectedCityCode, setSelectedCityCode] = useState("");
-  const [selectedBarangayCode, setSelectedBarangayCode] = useState("");
-
-  // Document State
-  const [businessLicenses, setBusinessLicenses] = useState([]);
-  const [certificates, setCertificates] = useState([]);
-  const [licenseDescription, setLicenseDescription] = useState("");
-  const [certificateDescription, setCertificateDescription] = useState("");
+  const { propertyDetails, location, documents, ui } = state;
+  const { currentStep, isSubmitting, error, stepError } = ui;
 
   // --- DERIVED STATE FOR SQM CALCULATION ---
-  const parsedOverallSqm = parseFloat(overallSqm || 0);
-  const parsedTotalUnitSqm = parseFloat(totalUnitSqm || 0);
+  const parsedOverallSqm = parseFloat(propertyDetails.overallSqm || 0);
+  const parsedTotalUnitSqm = parseFloat(propertyDetails.totalUnitSqm || 0);
   const unusedSqm = parsedOverallSqm - parsedTotalUnitSqm;
 
-  // --- Effects for fetching address data ---
-
-  // Fetch Regions on component mount
+  // --- Effects for fetching address data (Now simplified) ---
   useEffect(() => {
-    const loadInitialPhRegions = async () => {
-      try {
-        const regionsData = await getRegions();
-        setPhRegionsList(regionsData);
-      } catch (e) {
-        console.error("Failed to load Philippine regions:", e);
-        setPhRegionsList([]);
-      }
-    };
-    loadInitialPhRegions();
+    getRegions()
+      .then((regionsData) =>
+        dispatch({ type: "FETCH_REGIONS_SUCCESS", payload: regionsData })
+      )
+      .catch((e) =>
+        dispatch({
+          type: "FETCH_LOCATION_ERROR",
+          level: "regions",
+          error: e.message,
+        })
+      );
   }, []);
 
-  // Fetch Provinces when a Region is selected
   useEffect(() => {
-    // FIX: Clear province list and reset selections immediately when region changes.
-    // This prevents showing stale data from the previously selected region.
-    setPhProvincesList([]);
-    setSelectedProvinceCode("");
+    if (location.selectedRegionCode) {
+      getProvinces(location.selectedRegionCode)
+        .then((provincesData) =>
+          dispatch({ type: "FETCH_PROVINCES_SUCCESS", payload: provincesData })
+        )
+        .catch((e) =>
+          dispatch({
+            type: "FETCH_LOCATION_ERROR",
+            level: "provinces",
+            error: e.message,
+          })
+        );
+    }
+  }, [location.selectedRegionCode]);
 
-    const loadProvinces = async () => {
-      if (selectedRegionCode) {
-        try {
-          const provincesData = await getProvinces(selectedRegionCode);
-          setPhProvincesList(provincesData);
-        } catch (e) {
-          console.error(
-            `Failed to load provinces for ${selectedRegionCode}:`,
-            e
-          );
-          setPhProvincesList([]);
-        }
-      }
-    };
-    loadProvinces();
-  }, [selectedRegionCode]);
-
-  // Fetch Cities when a Province is selected
   useEffect(() => {
-    // FIX: Clear city list and reset selections immediately when province changes.
-    setPhCitiesList([]);
-    setSelectedCityCode("");
+    if (location.selectedProvinceCode) {
+      getCities(location.selectedProvinceCode)
+        .then((citiesData) =>
+          dispatch({ type: "FETCH_CITIES_SUCCESS", payload: citiesData })
+        )
+        .catch((e) =>
+          dispatch({
+            type: "FETCH_LOCATION_ERROR",
+            level: "cities",
+            error: e.message,
+          })
+        );
+    }
+  }, [location.selectedProvinceCode]);
 
-    const loadCities = async () => {
-      if (selectedProvinceCode) {
-        try {
-          const citiesData = await getCities(selectedProvinceCode);
-          setPhCitiesList(citiesData);
-        } catch (e) {
-          console.error(
-            `Failed to load cities for ${selectedProvinceCode}:`,
-            e
-          );
-          setPhCitiesList([]);
-        }
-      }
-    };
-    loadCities();
-  }, [selectedProvinceCode]);
-
-  // Fetch Barangays when a City is selected
   useEffect(() => {
-    // FIX: Clear barangay list and reset selection immediately when city changes.
-    setPhBarangaysList([]);
-    setSelectedBarangayCode("");
-
-    const loadBarangays = async () => {
-      if (selectedCityCode) {
-        try {
-          const barangaysData = await getBarangays(selectedCityCode);
-          setPhBarangaysList(barangaysData);
-        } catch (e) {
-          console.error(`Failed to load barangays for ${selectedCityCode}:`, e);
-          setPhBarangaysList([]);
-        }
-      }
-    };
-    loadBarangays();
-  }, [selectedCityCode]);
-
-  const resetForm = () => {
-    setPropertyName("");
-    setNumberOfUnits("");
-    setOverallSqm("");
-    setTotalUnitSqm("");
-    setStreet("");
-    setZipCode("");
-    setSelectedRegionCode("");
-    setSelectedProvinceCode("");
-    setSelectedCityCode("");
-    setSelectedBarangayCode("");
-    setBusinessLicenses([]);
-    setCertificates([]);
-    setLicenseDescription("");
-    setCertificateDescription("");
-    setError("");
-    setStepError("");
-    setCurrentStep(1);
-  };
+    if (location.selectedCityCode) {
+      getBarangays(location.selectedCityCode)
+        .then((barangaysData) =>
+          dispatch({ type: "FETCH_BARANGAYS_SUCCESS", payload: barangaysData })
+        )
+        .catch((e) =>
+          dispatch({
+            type: "FETCH_LOCATION_ERROR",
+            level: "barangays",
+            error: e.message,
+          })
+        );
+    }
+  }, [location.selectedCityCode]);
 
   const handleClose = () => {
-    resetForm();
+    dispatch({ type: "RESET_FORM" });
     onClose();
   };
 
   const handleNext = () => {
-    setStepError("");
     let isValid = true;
     if (currentStep === 1) {
-      if (!propertyName.trim()) {
-        setStepError("Property Name is a required field.");
+      if (!propertyDetails.propertyName.trim()) {
+        dispatch({
+          type: "SET_STEP_ERROR",
+          payload: "Property Name is a required field.",
+        });
         isValid = false;
       }
       if (unusedSqm < 0) {
-        setStepError(
-          "Total Unit SQM cannot be greater than the Overall Property SQM."
-        );
+        dispatch({
+          type: "SET_STEP_ERROR",
+          payload:
+            "Total Unit SQM cannot be greater than the Overall Property SQM.",
+        });
         isValid = false;
       }
     }
     if (currentStep === 2) {
-      if (!selectedRegionCode) {
-        setStepError("Region is a required field.");
+      if (!location.selectedRegionCode) {
+        dispatch({
+          type: "SET_STEP_ERROR",
+          payload: "Region is a required field.",
+        });
         isValid = false;
-      } else if (!selectedProvinceCode) {
-        setStepError("Province is a required field.");
+      } else if (!location.selectedProvinceCode) {
+        dispatch({
+          type: "SET_STEP_ERROR",
+          payload: "Province is a required field.",
+        });
         isValid = false;
-      } else if (!selectedCityCode) {
-        setStepError("City / Municipality is a required field.");
+      } else if (!location.selectedCityCode) {
+        dispatch({
+          type: "SET_STEP_ERROR",
+          payload: "City / Municipality is a required field.",
+        });
         isValid = false;
-      } else if (!selectedBarangayCode) {
-        setStepError("Barangay is a required field.");
+      } else if (!location.selectedBarangayCode) {
+        dispatch({
+          type: "SET_STEP_ERROR",
+          payload: "Barangay is a required field.",
+        });
         isValid = false;
       }
     }
     if (isValid) {
       if (currentStep < steps.length) {
-        setCurrentStep(currentStep + 1);
+        dispatch({ type: "SET_STEP", payload: currentStep + 1 });
       }
     }
   };
 
   const handleBack = () => {
-    setStepError("");
     if (currentStep > 1) {
-      setCurrentStep(currentStep - 1);
+      dispatch({ type: "SET_STEP", payload: currentStep - 1 });
     }
   };
 
@@ -434,56 +461,70 @@ const AddPropertyModal = ({ isOpen, onClose, onSuccess }) => {
     e.preventDefault();
     if (currentStep !== steps.length) return;
     if (unusedSqm < 0) {
-      setError("Cannot save: Total Unit SQM exceeds Overall Property SQM.");
+      dispatch({
+        type: "SET_ERROR",
+        payload: "Cannot save: Total Unit SQM exceeds Overall Property SQM.",
+      });
       return;
     }
     if (!userProfile?.id) {
-      setError("You must be logged in to add a property.");
+      dispatch({
+        type: "SET_ERROR",
+        payload: "You must be logged in to add a property.",
+      });
       return;
     }
-    setIsSubmitting(true);
-    setError("");
-    setStepError("");
+
+    dispatch({ type: "SET_SUBMITTING", payload: true });
+    dispatch({ type: "SET_ERROR", payload: "" });
+
     try {
-      const uploadedLicenseFiles = await uploadFiles(
-        businessLicenses,
-        userProfile.id
-      );
-      const uploadedCertFiles = await uploadFiles(certificates, userProfile.id);
+      // --- Optimization: Parallel uploads ---
+      const [uploadedLicenseFiles, uploadedCertFiles] = await Promise.all([
+        uploadFiles(documents.businessLicenses, userProfile.id),
+        uploadFiles(documents.certificates, userProfile.id),
+      ]);
+
       const licenseData = {
         files: uploadedLicenseFiles,
-        description: licenseDescription.trim(),
+        description: documents.licenseDescription.trim(),
       };
       const certificateData = {
         files: uploadedCertFiles,
-        description: certificateDescription.trim(),
+        description: documents.certificateDescription.trim(),
       };
 
-      // Find the selected names from the lists using the stored codes
-      const selectedRegionName = phRegionsList.find(
-        (r) => r.region_code === selectedRegionCode
+      // Find selected names from the lists
+      const selectedRegionName = location.regions.data.find(
+        (r) => r.region_code === location.selectedRegionCode
       )?.region_name;
-      const selectedProvinceName = phProvincesList.find(
-        (p) => p.province_code === selectedProvinceCode
+      const selectedProvinceName = location.provinces.data.find(
+        (p) => p.province_code === location.selectedProvinceCode
       )?.province_name;
-      const selectedCityName = phCitiesList.find(
-        (c) => c.city_code === selectedCityCode
+      const selectedCityName = location.cities.data.find(
+        (c) => c.city_code === location.selectedCityCode
       )?.city_name;
-      const selectedBarangayName = phBarangaysList.find(
-        (b) => b.brgy_code === selectedBarangayCode
+      const selectedBarangayName = location.barangays.data.find(
+        (b) => b.brgy_code === location.selectedBarangayCode
       )?.brgy_name;
 
       const propertyData = {
         created_by: userProfile.id,
         last_edited_by: userProfile.id,
-        property_name: propertyName.trim(),
-        number_of_units: numberOfUnits ? parseInt(numberOfUnits, 10) : null,
-        total_sqm: totalUnitSqm ? parseFloat(totalUnitSqm) : null,
-        overall_sqm: overallSqm ? parseFloat(overallSqm) : null,
+        property_name: propertyDetails.propertyName.trim(),
+        number_of_units: propertyDetails.numberOfUnits
+          ? parseInt(propertyDetails.numberOfUnits, 10)
+          : null,
+        total_sqm: propertyDetails.totalUnitSqm
+          ? parseFloat(propertyDetails.totalUnitSqm)
+          : null,
+        overall_sqm: propertyDetails.overallSqm
+          ? parseFloat(propertyDetails.overallSqm)
+          : null,
         address_country: "Philippines",
         address_country_iso: "PH",
-        address_street: street.trim(),
-        address_zip_code: zipCode.trim() || null,
+        address_street: location.street.trim(),
+        address_zip_code: location.zipCode.trim() || null,
         address_region: selectedRegionName || null,
         address_province: selectedProvinceName || null,
         address_city_municipality: selectedCityName || null,
@@ -496,13 +537,17 @@ const AddPropertyModal = ({ isOpen, onClose, onSuccess }) => {
         .from("properties")
         .insert([propertyData]);
       if (insertError) throw insertError;
+
       onSuccess();
       handleClose();
     } catch (err) {
       console.error("Error adding property:", err);
-      setError(`Failed to add property: ${err.message}`);
+      dispatch({
+        type: "SET_ERROR",
+        payload: `Failed to add property: ${err.message}`,
+      });
     } finally {
-      setIsSubmitting(false);
+      dispatch({ type: "SET_SUBMITTING", payload: false });
     }
   };
 
@@ -555,6 +600,11 @@ const AddPropertyModal = ({ isOpen, onClose, onSuccess }) => {
                 <Stepper currentStep={currentStep} steps={steps} />
 
                 <form onSubmit={handleSubmit} className="mt-6">
+                  {isSubmitting && (
+                    <div className="flex justify-center py-20">
+                      <LoadingSpinner />
+                    </div>
+                  )}
                   <div className="min-h-[350px]">
                     {/* --- Step 1: Property Details --- */}
                     {currentStep === 1 && (
@@ -567,8 +617,14 @@ const AddPropertyModal = ({ isOpen, onClose, onSuccess }) => {
                             <input
                               type="text"
                               placeholder="e.g., The Grand Residences"
-                              value={propertyName}
-                              onChange={(e) => setPropertyName(e.target.value)}
+                              value={propertyDetails.propertyName}
+                              onChange={(e) =>
+                                dispatch({
+                                  type: "SET_PROPERTY_DETAIL",
+                                  field: "propertyName",
+                                  payload: e.target.value,
+                                })
+                              }
                               className={inputStyles}
                               required
                             />
@@ -584,8 +640,14 @@ const AddPropertyModal = ({ isOpen, onClose, onSuccess }) => {
                               type="number"
                               step="0.01"
                               placeholder="e.g., 1500"
-                              value={overallSqm}
-                              onChange={(e) => setOverallSqm(e.target.value)}
+                              value={propertyDetails.overallSqm}
+                              onChange={(e) =>
+                                dispatch({
+                                  type: "SET_PROPERTY_DETAIL",
+                                  field: "overallSqm",
+                                  payload: e.target.value,
+                                })
+                              }
                               className={inputStyles}
                             />
                           </FormInputGroup>
@@ -599,9 +661,13 @@ const AddPropertyModal = ({ isOpen, onClose, onSuccess }) => {
                               <input
                                 type="number"
                                 placeholder="e.g., 50"
-                                value={numberOfUnits}
+                                value={propertyDetails.numberOfUnits}
                                 onChange={(e) =>
-                                  setNumberOfUnits(e.target.value)
+                                  dispatch({
+                                    type: "SET_PROPERTY_DETAIL",
+                                    field: "numberOfUnits",
+                                    payload: e.target.value,
+                                  })
                                 }
                                 className={inputStyles}
                                 min="0"
@@ -618,9 +684,13 @@ const AddPropertyModal = ({ isOpen, onClose, onSuccess }) => {
                                 type="number"
                                 step="0.01"
                                 placeholder="e.g., 1200.50"
-                                value={totalUnitSqm}
+                                value={propertyDetails.totalUnitSqm}
                                 onChange={(e) =>
-                                  setTotalUnitSqm(e.target.value)
+                                  dispatch({
+                                    type: "SET_PROPERTY_DETAIL",
+                                    field: "totalUnitSqm",
+                                    payload: e.target.value,
+                                  })
                                 }
                                 className={inputStyles}
                               />
@@ -628,46 +698,49 @@ const AddPropertyModal = ({ isOpen, onClose, onSuccess }) => {
                           </div>
                         </div>
 
-                        {overallSqm > 0 && totalUnitSqm > 0 && (
-                          <div
-                            className={`mt-6 p-4 rounded-lg text-sm ${
-                              unusedSqm < 0
-                                ? "bg-red-50 text-red-800 border-red-200"
-                                : "bg-gray-100 text-gray-800 border-gray-200"
-                            } border transition-colors`}
-                          >
-                            <h5 className="font-bold mb-2">Area Calculation</h5>
-                            <div className="space-y-1">
-                              <p>
-                                Overall Property Area:{" "}
-                                <span className="font-semibold">
-                                  {parsedOverallSqm.toLocaleString()} sqm
-                                </span>
-                              </p>
-                              <p>
-                                - Total Unit Area:{" "}
-                                <span className="font-semibold">
-                                  {parsedTotalUnitSqm.toLocaleString()} sqm
-                                </span>
-                              </p>
-                              <hr className="my-1" />
-                              <p
-                                className={`font-bold ${
-                                  unusedSqm < 0 ? "text-red-600" : ""
-                                }`}
-                              >
-                                = Common/Unused Area:{" "}
-                                <span>{unusedSqm.toLocaleString()} sqm</span>
-                              </p>
+                        {propertyDetails.overallSqm > 0 &&
+                          propertyDetails.totalUnitSqm > 0 && (
+                            <div
+                              className={`mt-6 p-4 rounded-lg text-sm ${
+                                unusedSqm < 0
+                                  ? "bg-red-50 text-red-800 border-red-200"
+                                  : "bg-gray-100 text-gray-800 border-gray-200"
+                              } border transition-colors`}
+                            >
+                              <h5 className="font-bold mb-2">
+                                Area Calculation
+                              </h5>
+                              <div className="space-y-1">
+                                <p>
+                                  Overall Property Area:{" "}
+                                  <span className="font-semibold">
+                                    {parsedOverallSqm.toLocaleString()} sqm
+                                  </span>
+                                </p>
+                                <p>
+                                  - Total Unit Area:{" "}
+                                  <span className="font-semibold">
+                                    {parsedTotalUnitSqm.toLocaleString()} sqm
+                                  </span>
+                                </p>
+                                <hr className="my-1" />
+                                <p
+                                  className={`font-bold ${
+                                    unusedSqm < 0 ? "text-red-600" : ""
+                                  }`}
+                                >
+                                  = Common/Unused Area:{" "}
+                                  <span>{unusedSqm.toLocaleString()} sqm</span>
+                                </p>
+                              </div>
+                              {unusedSqm < 0 && (
+                                <p className="mt-2 font-semibold">
+                                  Warning: The total unit area cannot be larger
+                                  than the overall property area.
+                                </p>
+                              )}
                             </div>
-                            {unusedSqm < 0 && (
-                              <p className="mt-2 font-semibold">
-                                Warning: The total unit area cannot be larger
-                                than the overall property area.
-                              </p>
-                            )}
-                          </div>
-                        )}
+                          )}
                       </div>
                     )}
                     {/* --- Step 2: Location --- */}
@@ -693,17 +766,22 @@ const AddPropertyModal = ({ isOpen, onClose, onSuccess }) => {
                           <div className="relative">
                             <FormInputGroup label="Region*">
                               <select
-                                value={selectedRegionCode}
+                                value={location.selectedRegionCode}
                                 onChange={(e) =>
-                                  setSelectedRegionCode(e.target.value)
+                                  dispatch({
+                                    type: "SET_REGION",
+                                    payload: e.target.value,
+                                  })
                                 }
                                 className={selectStyles}
                                 required
                               >
                                 <option value="" disabled>
-                                  Select a region...
+                                  {location.regions.status === "loading"
+                                    ? "Loading regions..."
+                                    : "Select a region..."}
                                 </option>
-                                {phRegionsList.map((region) => (
+                                {location.regions.data.map((region) => (
                                   <option
                                     key={region.region_code}
                                     value={region.region_code}
@@ -718,18 +796,26 @@ const AddPropertyModal = ({ isOpen, onClose, onSuccess }) => {
                           <div className="relative">
                             <FormInputGroup label="Province*">
                               <select
-                                value={selectedProvinceCode}
+                                value={location.selectedProvinceCode}
                                 onChange={(e) =>
-                                  setSelectedProvinceCode(e.target.value)
+                                  dispatch({
+                                    type: "SET_PROVINCE",
+                                    payload: e.target.value,
+                                  })
                                 }
                                 className={selectStyles}
-                                disabled={!selectedRegionCode}
+                                disabled={
+                                  !location.selectedRegionCode ||
+                                  location.provinces.status !== "success"
+                                }
                                 required
                               >
                                 <option value="" disabled>
-                                  Select a province...
+                                  {location.provinces.status === "loading"
+                                    ? "Loading provinces..."
+                                    : "Select a province..."}
                                 </option>
-                                {phProvincesList.map((province) => (
+                                {location.provinces.data.map((province) => (
                                   <option
                                     key={province.province_code}
                                     value={province.province_code}
@@ -744,18 +830,26 @@ const AddPropertyModal = ({ isOpen, onClose, onSuccess }) => {
                           <div className="relative">
                             <FormInputGroup label="City / Municipality*">
                               <select
-                                value={selectedCityCode}
+                                value={location.selectedCityCode}
                                 onChange={(e) =>
-                                  setSelectedCityCode(e.target.value)
+                                  dispatch({
+                                    type: "SET_CITY",
+                                    payload: e.target.value,
+                                  })
                                 }
                                 className={selectStyles}
-                                disabled={!selectedProvinceCode}
+                                disabled={
+                                  !location.selectedProvinceCode ||
+                                  location.cities.status !== "success"
+                                }
                                 required
                               >
                                 <option value="" disabled>
-                                  Select a city/municipality...
+                                  {location.cities.status === "loading"
+                                    ? "Loading cities..."
+                                    : "Select a city/municipality..."}
                                 </option>
-                                {phCitiesList.map((city) => (
+                                {location.cities.data.map((city) => (
                                   <option
                                     key={city.city_code}
                                     value={city.city_code}
@@ -770,18 +864,26 @@ const AddPropertyModal = ({ isOpen, onClose, onSuccess }) => {
                           <div className="relative">
                             <FormInputGroup label="Barangay*">
                               <select
-                                value={selectedBarangayCode}
+                                value={location.selectedBarangayCode}
                                 onChange={(e) =>
-                                  setSelectedBarangayCode(e.target.value)
+                                  dispatch({
+                                    type: "SET_BARANGAY",
+                                    payload: e.target.value,
+                                  })
                                 }
                                 className={selectStyles}
-                                disabled={!selectedCityCode}
+                                disabled={
+                                  !location.selectedCityCode ||
+                                  location.barangays.status !== "success"
+                                }
                                 required
                               >
                                 <option value="" disabled>
-                                  Select a barangay...
+                                  {location.barangays.status === "loading"
+                                    ? "Loading barangays..."
+                                    : "Select a barangay..."}
                                 </option>
-                                {phBarangaysList.map((barangay) => (
+                                {location.barangays.data.map((barangay) => (
                                   <option
                                     key={barangay.brgy_code}
                                     value={barangay.brgy_code}
@@ -798,8 +900,14 @@ const AddPropertyModal = ({ isOpen, onClose, onSuccess }) => {
                             <input
                               type="text"
                               placeholder="e.g., 123 Oak Avenue"
-                              value={street}
-                              onChange={(e) => setStreet(e.target.value)}
+                              value={location.street}
+                              onChange={(e) =>
+                                dispatch({
+                                  type: "SET_LOCATION_FIELD",
+                                  field: "street",
+                                  payload: e.target.value,
+                                })
+                              }
                               className={inputStyles}
                             />
                           </FormInputGroup>
@@ -807,8 +915,14 @@ const AddPropertyModal = ({ isOpen, onClose, onSuccess }) => {
                             <input
                               type="text"
                               placeholder="e.g., 1605"
-                              value={zipCode}
-                              onChange={(e) => setZipCode(e.target.value)}
+                              value={location.zipCode}
+                              onChange={(e) =>
+                                dispatch({
+                                  type: "SET_LOCATION_FIELD",
+                                  field: "zipCode",
+                                  payload: e.target.value,
+                                })
+                              }
                               className={inputStyles}
                             />
                           </FormInputGroup>
@@ -828,17 +942,41 @@ const AddPropertyModal = ({ isOpen, onClose, onSuccess }) => {
                         <div className="space-y-6">
                           <ImageUploader
                             label="Business License(s)"
-                            files={businessLicenses}
-                            setFiles={setBusinessLicenses}
-                            description={licenseDescription}
-                            setDescription={setLicenseDescription}
+                            files={documents.businessLicenses}
+                            setFiles={(files) =>
+                              dispatch({
+                                type: "SET_DOCUMENTS",
+                                field: "businessLicenses",
+                                payload: files,
+                              })
+                            }
+                            description={documents.licenseDescription}
+                            setDescription={(desc) =>
+                              dispatch({
+                                type: "SET_DOCUMENTS",
+                                field: "licenseDescription",
+                                payload: desc,
+                              })
+                            }
                           />
                           <ImageUploader
                             label="Certificate(s) of Registration"
-                            files={certificates}
-                            setFiles={setCertificates}
-                            description={certificateDescription}
-                            setDescription={setCertificateDescription}
+                            files={documents.certificates}
+                            setFiles={(files) =>
+                              dispatch({
+                                type: "SET_DOCUMENTS",
+                                field: "certificates",
+                                payload: files,
+                              })
+                            }
+                            description={documents.certificateDescription}
+                            setDescription={(desc) =>
+                              dispatch({
+                                type: "SET_DOCUMENTS",
+                                field: "certificateDescription",
+                                payload: desc,
+                              })
+                            }
                           />
                         </div>
                       </div>

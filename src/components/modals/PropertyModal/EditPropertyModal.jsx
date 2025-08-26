@@ -14,6 +14,7 @@ import { ChevronDownIcon } from "@heroicons/react/20/solid";
 import { IoMdClose } from "react-icons/io";
 import Stepper from "../../ui/common/Stepper";
 import axios from "axios";
+import LoadingSpinner from "../../ui/LoadingSpinner";
 
 // --- New Philippine Address API Functions ---
 const fetchAddressData = (jsonPathName) =>
@@ -118,101 +119,36 @@ const inputStyles =
   "block w-full text-sm rounded-lg border-gray-300 bg-gray-50 p-2.5 text-gray-900 focus:border-orange-500 focus:ring-orange-500 disabled:cursor-not-allowed disabled:opacity-60";
 const selectStyles = `${inputStyles} appearance-none`;
 
-const changeFileExtension = (filename, newExtension) => {
-  const lastDot = filename.lastIndexOf(".");
-  const baseName = lastDot === -1 ? filename : filename.substring(0, lastDot);
-  return `${baseName}.${newExtension}`;
-};
-
-const convertImageToAvif = (file, options = { quality: 0.8 }) => {
-  return new Promise((resolve) => {
-    const canvas = document.createElement("canvas");
-    if (
-      typeof canvas.toDataURL !== "function" ||
-      canvas.toDataURL("image/avif").indexOf("data:image/avif") < 0
-    ) {
-      console.warn(
-        "AVIF conversion not supported by this browser. Uploading original file."
-      );
-      resolve(file); // Fallback to original file
-      return;
-    }
-    const blobURL = URL.createObjectURL(file);
-    const img = new Image();
-    img.onload = () => {
-      canvas.width = img.width;
-      canvas.height = img.height;
-      const ctx = canvas.getContext("2d");
-      ctx.drawImage(img, 0, 0);
-      canvas.toBlob(
-        (blob) => {
-          URL.revokeObjectURL(blobURL); // Clean up memory
-          if (blob && blob.type === "image/avif") {
-            const newFileName = changeFileExtension(file.name, "avif");
-            const avifFile = new File([blob], newFileName, {
-              type: "image/avif",
-            });
-            console.log(
-              `Converted ${file.name} (${(file.size / 1024).toFixed(
-                2
-              )} KB) to ${avifFile.name} (${(avifFile.size / 1024).toFixed(
-                2
-              )} KB)`
-            );
-            resolve(avifFile);
-          } else {
-            // Fallback if conversion fails for any reason
-            resolve(file);
-          }
-        },
-        "image/avif",
-        options.quality
-      );
-    };
-    img.onerror = () => {
-      URL.revokeObjectURL(blobURL);
-      console.error(
-        "Could not load image for conversion. Uploading original file."
-      );
-      resolve(file); // Fallback to original file
-    };
-    img.src = blobURL;
-  });
-};
-
+// --- File Upload Function (No Conversion) ---
 const uploadFiles = async (files, userId) => {
   if (!userId) {
     throw new Error("User ID is required for uploading files.");
   }
   const uploadedFileData = [];
   for (const item of files) {
+    // Only upload files that are newly added
     if (item.source === "new" && item.file) {
-      let fileToUpload = item.file;
-      if (item.file.type.startsWith("image/")) {
-        try {
-          fileToUpload = await convertImageToAvif(item.file);
-        } catch (conversionError) {
-          console.error(
-            "Image conversion failed, uploading original:",
-            conversionError
-          );
-          fileToUpload = item.file; // Ensure fallback on error
-        }
-      }
+      const fileToUpload = item.file; // Directly use the original file
+
       const filePath = `user_${userId}/${uuidv4()}-${fileToUpload.name}`;
+
       const { error: uploadError } = await supabase.storage
         .from("property-documents")
         .upload(filePath, fileToUpload);
+
       if (uploadError) {
         console.error("Supabase upload error:", uploadError);
         throw new Error(`Failed to upload ${fileToUpload.name}.`);
       }
+
       const { data } = supabase.storage
         .from("property-documents")
         .getPublicUrl(filePath);
+
       if (!data?.publicUrl) {
         throw new Error(`Could not get public URL for ${fileToUpload.name}.`);
       }
+
       uploadedFileData.push({ url: data.publicUrl, path: filePath });
     }
   }
@@ -278,9 +214,6 @@ const EditPropertyModal = ({ isOpen, onClose, onSuccess, property }) => {
 
   // Fetch Provinces when a Region is selected
   useEffect(() => {
-    // FIX: Clear province list and reset selections immediately when region changes.
-    setPhProvincesList([]);
-    setSelectedProvinceCode("");
     const loadProvinces = async () => {
       if (selectedRegionCode) {
         try {
@@ -291,8 +224,10 @@ const EditPropertyModal = ({ isOpen, onClose, onSuccess, property }) => {
             `Failed to load provinces for ${selectedRegionCode}:`,
             e
           );
-          setPhProvincesList([]);
+          setPhProvincesList([]); // Keep reset on error
         }
+      } else {
+        setPhProvincesList([]); // Also reset if region is cleared
       }
     };
     loadProvinces();
@@ -300,9 +235,6 @@ const EditPropertyModal = ({ isOpen, onClose, onSuccess, property }) => {
 
   // Fetch Cities when a Province is selected
   useEffect(() => {
-    // FIX: Clear city list and reset selections immediately when province changes.
-    setPhCitiesList([]);
-    setSelectedCityCode("");
     const loadCities = async () => {
       if (selectedProvinceCode) {
         try {
@@ -315,6 +247,8 @@ const EditPropertyModal = ({ isOpen, onClose, onSuccess, property }) => {
           );
           setPhCitiesList([]);
         }
+      } else {
+        setPhCitiesList([]);
       }
     };
     loadCities();
@@ -322,9 +256,6 @@ const EditPropertyModal = ({ isOpen, onClose, onSuccess, property }) => {
 
   // Fetch Barangays when a City is selected
   useEffect(() => {
-    // FIX: Clear barangay list and reset selection immediately when city changes.
-    setPhBarangaysList([]);
-    setSelectedBarangayCode("");
     const loadBarangays = async () => {
       if (selectedCityCode) {
         try {
@@ -334,6 +265,8 @@ const EditPropertyModal = ({ isOpen, onClose, onSuccess, property }) => {
           console.error(`Failed to load barangays for ${selectedCityCode}:`, e);
           setPhBarangaysList([]);
         }
+      } else {
+        setPhBarangaysList([]);
       }
     };
     loadBarangays();
@@ -343,6 +276,12 @@ const EditPropertyModal = ({ isOpen, onClose, onSuccess, property }) => {
   useEffect(() => {
     const populateForm = async () => {
       if (!property) return;
+
+      // Reset internal state for a clean slate on each open
+      setFilesToDelete([]);
+      setError("");
+      setStepError("");
+      setCurrentStep(1);
 
       // Step 1 Fields
       setPropertyName(property.property_name || "");
@@ -354,61 +293,57 @@ const EditPropertyModal = ({ isOpen, onClose, onSuccess, property }) => {
       setStreet(property.address_street || "");
       setZipCode(property.address_zip_code || "");
 
-      // Load regions first
+      // --- Start of Corrected Address Population Logic ---
       try {
+        // 1. Fetch and set regions
         const regionsData = await getRegions();
         setPhRegionsList(regionsData);
+        const region = regionsData.find(
+          (r) => r.region_name === property.address_region
+        );
+        if (!region) return; // Stop if no region match
+        setSelectedRegionCode(region.region_code);
 
-        // Find the region code from the property data
-        const regionName = property.address_region;
-        const region = regionsData.find((r) => r.region_name === regionName);
+        // 2. Fetch provinces based on the found region code, then set list and selection
+        const provincesData = await getProvinces(region.region_code);
+        setPhProvincesList(provincesData);
+        const province = provincesData.find(
+          (p) => p.province_name === property.address_province
+        );
+        if (!province) return; // Stop if no province match
+        setSelectedProvinceCode(province.province_code);
 
-        if (region) {
-          setSelectedRegionCode(region.region_code);
+        // 3. Fetch cities based on the found province code, then set list and selection
+        const citiesData = await getCities(province.province_code);
+        setPhCitiesList(citiesData);
+        const city = citiesData.find(
+          (c) => c.city_name === property.address_city_municipality
+        );
+        if (!city) return; // Stop if no city match
+        setSelectedCityCode(city.city_code);
 
-          // Load provinces for this region
-          const provincesData = await getProvinces(region.region_code);
-          setPhProvincesList(provincesData);
-
-          // Find the province code from the property data
-          const provinceName = property.address_province;
-          const province = provincesData.find(
-            (p) => p.province_name === provinceName
-          );
-
-          if (province) {
-            setSelectedProvinceCode(province.province_code);
-
-            // Load cities for this province
-            const citiesData = await getCities(province.province_code);
-            setPhCitiesList(citiesData);
-
-            // Find the city code from the property data
-            const cityName = property.address_city_municipality;
-            const city = citiesData.find((c) => c.city_name === cityName);
-
-            if (city) {
-              setSelectedCityCode(city.city_code);
-
-              // Load barangays for this city
-              const barangaysData = await getBarangays(city.city_code);
-              setPhBarangaysList(barangaysData);
-
-              // Find the barangay code from the property data
-              const barangayName = property.address_barangay;
-              const barangay = barangaysData.find(
-                (b) => b.brgy_name === barangayName
-              );
-
-              if (barangay) {
-                setSelectedBarangayCode(barangay.brgy_code);
-              }
-            }
-          }
+        // 4. Fetch barangays based on the found city code, then set list and selection
+        const barangaysData = await getBarangays(city.city_code);
+        setPhBarangaysList(barangaysData);
+        const barangay = barangaysData.find(
+          (b) => b.brgy_name === property.address_barangay
+        );
+        if (barangay) {
+          setSelectedBarangayCode(barangay.brgy_code);
         }
       } catch (e) {
-        console.error("Failed to populate address data:", e);
+        console.error("Failed to populate address dropdowns:", e);
+        // Reset address fields on failure to prevent stale data
+        setPhRegionsList([]);
+        setPhProvincesList([]);
+        setPhCitiesList([]);
+        setPhBarangaysList([]);
+        setSelectedRegionCode("");
+        setSelectedProvinceCode("");
+        setSelectedCityCode("");
+        setSelectedBarangayCode("");
       }
+      // --- End of Corrected Address Population Logic ---
 
       // Step 3 Fields
       const mapExistingFiles = (doc) => {
@@ -427,12 +362,6 @@ const EditPropertyModal = ({ isOpen, onClose, onSuccess, property }) => {
       setCertificateDescription(
         property.certificates_of_registration?.description || ""
       );
-
-      // Reset internal state
-      setFilesToDelete([]);
-      setError("");
-      setStepError("");
-      setCurrentStep(1);
     };
 
     if (isOpen) {
@@ -574,8 +503,7 @@ const EditPropertyModal = ({ isOpen, onClose, onSuccess, property }) => {
         address_province: selectedProvinceName || null,
         address_city_municipality: selectedCityName || null,
         address_barangay: selectedBarangayName || null,
-        address_state: null, // Clear out non-PH fields
-        address_state_iso: null, // Clear out non-PH fields
+
         business_licenses: licenseData,
         certificates_of_registration: certificateData,
       };
@@ -622,7 +550,6 @@ const EditPropertyModal = ({ isOpen, onClose, onSuccess, property }) => {
     certificates,
     setCertificates
   );
-
   return (
     <Transition appear show={isOpen} as={Fragment}>
       <Dialog as="div" className="relative z-50" onClose={handleClose}>
@@ -670,7 +597,13 @@ const EditPropertyModal = ({ isOpen, onClose, onSuccess, property }) => {
                   {property?.property_name || "your property"}".
                 </p>
                 <Stepper currentStep={currentStep} steps={steps} />
+
                 <form onSubmit={handleSubmit} className="mt-6">
+                  {isSubmitting && (
+                    <div className="flex justify-center py-20">
+                      <LoadingSpinner />
+                    </div>
+                  )}
                   <div className="min-h-[350px]">
                     {currentStep === 1 && (
                       <div className="space-y-4 animate-fadeIn">
@@ -804,9 +737,17 @@ const EditPropertyModal = ({ isOpen, onClose, onSuccess, property }) => {
                             <FormInputGroup label="Region*">
                               <select
                                 value={selectedRegionCode}
-                                onChange={(e) =>
-                                  setSelectedRegionCode(e.target.value)
-                                }
+                                onChange={(e) => {
+                                  // This is a user action, so clear children
+                                  setSelectedRegionCode(e.target.value);
+                                  setSelectedProvinceCode("");
+                                  setSelectedCityCode("");
+                                  setSelectedBarangayCode("");
+                                  // Also clear the data lists to remove old options
+                                  setPhProvincesList([]);
+                                  setPhCitiesList([]);
+                                  setPhBarangaysList([]);
+                                }}
                                 className={selectStyles}
                                 required
                               >
@@ -829,11 +770,19 @@ const EditPropertyModal = ({ isOpen, onClose, onSuccess, property }) => {
                             <FormInputGroup label="Province*">
                               <select
                                 value={selectedProvinceCode}
-                                onChange={(e) =>
-                                  setSelectedProvinceCode(e.target.value)
-                                }
+                                onChange={(e) => {
+                                  // This is a user action, so clear children
+                                  setSelectedProvinceCode(e.target.value);
+                                  setSelectedCityCode("");
+                                  setSelectedBarangayCode("");
+                                  setPhCitiesList([]);
+                                  setPhBarangaysList([]);
+                                }}
                                 className={selectStyles}
-                                disabled={!selectedRegionCode}
+                                disabled={
+                                  !selectedRegionCode ||
+                                  phProvincesList.length === 0
+                                }
                                 required
                               >
                                 <option value="" disabled>
@@ -855,11 +804,17 @@ const EditPropertyModal = ({ isOpen, onClose, onSuccess, property }) => {
                             <FormInputGroup label="City / Municipality*">
                               <select
                                 value={selectedCityCode}
-                                onChange={(e) =>
-                                  setSelectedCityCode(e.target.value)
-                                }
+                                onChange={(e) => {
+                                  // This is a user action, so clear children
+                                  setSelectedCityCode(e.target.value);
+                                  setSelectedBarangayCode("");
+                                  setPhBarangaysList([]);
+                                }}
                                 className={selectStyles}
-                                disabled={!selectedProvinceCode}
+                                disabled={
+                                  !selectedProvinceCode ||
+                                  phCitiesList.length === 0
+                                }
                                 required
                               >
                                 <option value="" disabled>
@@ -881,11 +836,15 @@ const EditPropertyModal = ({ isOpen, onClose, onSuccess, property }) => {
                             <FormInputGroup label="Barangay*">
                               <select
                                 value={selectedBarangayCode}
-                                onChange={(e) =>
-                                  setSelectedBarangayCode(e.target.value)
-                                }
+                                onChange={(e) => {
+                                  // No children to clear, just set the value
+                                  setSelectedBarangayCode(e.target.value);
+                                }}
                                 className={selectStyles}
-                                disabled={!selectedCityCode}
+                                disabled={
+                                  !selectedCityCode ||
+                                  phBarangaysList.length === 0
+                                }
                                 required
                               >
                                 <option value="" disabled>

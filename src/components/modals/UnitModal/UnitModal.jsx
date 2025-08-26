@@ -34,7 +34,6 @@ export default function UnitModal({ isOpen, onClose, onSuccess }) {
   };
 
   const handleSaveSuccess = () => {
-    console.log("Save successful!");
     if (onSuccess) onSuccess();
     handleClose(); // Also ensure local state is reset
   };

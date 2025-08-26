@@ -19,45 +19,16 @@ const PropertiesTable = ({
 }) => {
   const [isViewerOpen, setIsViewerOpen] = useState(false);
   const [viewerConfig, setViewerConfig] = useState({ images: [], title: "" });
-  const [imageErrors, setImageErrors] = useState({});
 
   const openViewer = (files, title) => {
     if (!files || files.length === 0) return;
     const imageUrls = files.map((file) => file.url);
     setViewerConfig({ images: imageUrls, title });
-    setImageErrors({}); // Reset errors when opening viewer
     setIsViewerOpen(true);
   };
 
   const closeViewer = () => {
     setIsViewerOpen(false);
-  };
-
-  const handleImageError = (imageUrl) => {
-    setImageErrors((prev) => ({
-      ...prev,
-      [imageUrl]: true,
-    }));
-  };
-
-  // Function to determine if a URL is an AVIF image
-  const isAvifImage = (url) => {
-    return url.toLowerCase().includes(".avif");
-  };
-
-  // Function to get a fallback URL for AVIF images
-  const getFallbackUrl = (url) => {
-    if (!isAvifImage(url)) return url;
-
-    // Try to replace .avif with .jpg or .png as fallbacks
-    const jpgUrl = url.replace(/\.avif$/i, ".jpg");
-    const pngUrl = url.replace(/\.avif$/i, ".png");
-
-    // Return the first fallback that exists in our images array
-    if (viewerConfig.images.includes(jpgUrl)) return jpgUrl;
-    if (viewerConfig.images.includes(pngUrl)) return pngUrl;
-
-    return url; // Return original if no fallback found
   };
 
   Modal.setAppElement("#root");
@@ -219,50 +190,40 @@ const PropertiesTable = ({
           );
         })}
       </div>
-
       <Modal
         isOpen={isViewerOpen}
         onRequestClose={closeViewer}
         contentLabel={viewerConfig.title}
         className="flex items-center justify-center p-4 outline-none"
-        overlayClassName="fixed inset-0 bg-black/75 z-50 flex items-center justify-center"
+        overlayClassName="fixed inset-0 bg-black/75 z-50 flex items-center justify-center "
       >
-        <div className="relative w-full max-w-4xl mx-auto max-h-[90vh]">
-          <button
-            onClick={closeViewer}
-            className="absolute top-4 right-4 text-white text-3xl z-10"
-          >
-            &times;
-          </button>
-          <div className="bg-white rounded-lg p-4 overflow-y-auto">
+        <div className="relative w-full max-w-4xl mx-auto max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-lg p-4 ">
             <h2 className="text-xl font-bold mb-4">{viewerConfig.title}</h2>
-            <Carousel showThumbs={true}>
-              {viewerConfig.images.map((image, index) => {
-                const avifSrc = image.replace(/\.(jpg|jpeg|png)$/i, ".avif");
-                return (
-                  <div
-                    key={index}
-                    className="w-full h-full flex flex-col items-center justify-center"
-                  >
+            {viewerConfig.images.length > 0 && (
+              <Carousel showThumbs={false} autoPlay infiniteLoop>
+                {viewerConfig.images.map((originalUrl, index) => (
+                  <div key={index}>
                     <picture>
-                      <source srcSet={avifSrc} type="image/avif" />
+                      <source
+                        srcSet={`${originalUrl}?transform=w_1200,q_80,f_avif`}
+                        type="image/avif"
+                      />
+                      <source
+                        srcSet={`${originalUrl}?transform=w_1200,q_80,f_webp`}
+                        type="image/webp"
+                      />
                       <img
-                        src={image}
+                        src={originalUrl}
                         alt={`${viewerConfig.title} ${index + 1}`}
                         className="max-w-full max-h-[75vh] object-contain"
                         loading="lazy"
-                        onError={() => handleImageError(image)}
                       />
                     </picture>
-                    {isAvifImage(image) && (
-                      <div className="mt-2 text-xs text-gray-500 bg-yellow-50 px-2 py-1 rounded-full">
-                        AVIF format – May not display in all browsers
-                      </div>
-                    )}
                   </div>
-                );
-              })}
-            </Carousel>
+                ))}
+              </Carousel>
+            )}
           </div>
         </div>
       </Modal>
