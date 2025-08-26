@@ -4,8 +4,8 @@ import tailwindcss from "@tailwindcss/vite";
 import { visualizer } from "rollup-plugin-visualizer";
 
 export default defineConfig({
-  base: "/",
-  // base: "/PropertyManagementSystem/", // IMPORTANT for GitHub Pages
+  // base: "/",
+  base: "/PropertyManagementSystem/", // IMPORTANT for GitHub Pages
   plugins: [
     react(),
     tailwindcss(),
