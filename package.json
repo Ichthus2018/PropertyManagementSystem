@@ -6,10 +6,9 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "deploy": "gh-pages -d dist",
+    "deploy": "npm run build && echo gaia-pms.xyz > dist/CNAME && gh-pages -d dist",
     "lint": "eslint .",
-    "preview": "vite preview",
-    "predeploy": "npm run build"
+    "preview": "vite preview"
   },
   "dependencies": {
     "@headlessui/react": "^2.2.7",
