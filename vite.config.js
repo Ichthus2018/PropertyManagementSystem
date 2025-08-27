@@ -4,8 +4,8 @@ import tailwindcss from "@tailwindcss/vite";
 import { visualizer } from "rollup-plugin-visualizer";
 
 export default defineConfig({
-  // base: "/",
-  base: "/PropertyManagementSystem/", // IMPORTANT for GitHub Pages
+  base: "/", //custom domain, always set base: "/".
+  // base: "/PropertyManagementSystem/", // is only used if your site is served under https://username.github.io/PropertyManagementSystem/.
   plugins: [
     react(),
     tailwindcss(),
