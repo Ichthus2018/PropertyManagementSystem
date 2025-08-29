@@ -1,6 +1,6 @@
-// src/components/modals/FacilityModal/AddFacilityModal.jsx
+// src/components/modals/FacilityModal/EditFacilityModal.jsx
 
-import { Fragment, useState } from "react";
+import { Fragment, useState, useEffect } from "react";
 import {
   Dialog,
   DialogPanel,
@@ -12,70 +12,99 @@ import { XMarkIcon, ArrowPathIcon } from "@heroicons/react/24/outline";
 import { v4 as uuidv4 } from "uuid";
 import ImageUploader from "../../ui/ImageUploader";
 import supabase from "../../../lib/supabase";
-import AmenitiesInput from "./AmenitiesInput"; // Assuming these components exist
+import AmenitiesInput from "./AmenitiesInput"; // Assuming this component exists
 
-export default function AddFacilityModal({ isOpen, onClose, onSuccess }) {
+export default function EditFacilityModal({
+  isOpen,
+  onClose,
+  onSuccess,
+  facility,
+}) {
+  // State for form fields
   const [facilityName, setFacilityName] = useState("");
-  const [imageFiles, setImageFiles] = useState([]);
   const [amenities, setAmenities] = useState([]);
+  const [imageFiles, setImageFiles] = useState([]); // For new image uploads
+  const [existingImageUrl, setExistingImageUrl] = useState(null);
+
+  // State for UI
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState(null);
 
+  // Effect to populate the form when the modal opens or the facility data changes
+  useEffect(() => {
+    if (facility && isOpen) {
+      setFacilityName(facility.name || "");
+      setAmenities(facility.amenities || []); // Assuming you have an amenities field
+      setExistingImageUrl(facility.image_url || null);
+
+      // Reset fields for new uploads and errors
+      setImageFiles([]);
+      setError(null);
+    }
+  }, [facility, isOpen]);
+
   const handleClose = () => {
-    setFacilityName("");
-    setImageFiles([]);
-    setAmenities([]);
-    setIsSaving(false);
-    setError(null);
+    // We don't need to reset state here because the useEffect will do it
+    // when the modal re-opens.
     onClose();
   };
 
   const handleSave = async () => {
     setError(null);
     if (!isFormValid) return;
+    if (!facility) return; // Safety check
 
     setIsSaving(true);
     try {
-      const imageFile = imageFiles[0].file;
-      const fileName = `${uuidv4()}-${imageFile.name}`;
-      const filePath = `public/${fileName}`;
+      let finalImageUrl = existingImageUrl;
 
-      const { error: uploadError } = await supabase.storage
-        .from("facility-images")
-        .upload(filePath, imageFile);
+      // 1. If a new image was selected, upload it
+      if (imageFiles.length > 0) {
+        const imageFile = imageFiles[0].file;
+        const fileName = `${uuidv4()}-${imageFile.name}`;
+        const filePath = `public/${fileName}`;
 
-      if (uploadError) throw uploadError;
+        const { error: uploadError } = await supabase.storage
+          .from("facility-images")
+          .upload(filePath, imageFile);
 
-      const { data: urlData } = supabase.storage
-        .from("facility-images")
-        .getPublicUrl(filePath);
+        if (uploadError) throw uploadError;
 
-      const imageUrl = urlData.publicUrl;
+        const { data: urlData } = supabase.storage
+          .from("facility-images")
+          .getPublicUrl(filePath);
 
-      const { error: facilityError } = await supabase
+        finalImageUrl = urlData.publicUrl;
+
+        // Optional: Delete the old image from storage here
+      }
+
+      // 2. Prepare the data to update
+      const updates = {
+        name: facilityName,
+        image_url: finalImageUrl,
+        amenities: amenities,
+      };
+
+      // 3. Update the record in the 'facilities' table
+      const { error: updateError } = await supabase
         .from("facilities")
-        .insert({
-          name: facilityName,
-          image_url: imageUrl,
-          amenities: amenities,
-        })
-        .select()
-        .single();
+        .update(updates)
+        .eq("id", facility.id);
 
-      if (facilityError) throw facilityError;
+      if (updateError) throw updateError;
 
-      // This now calls the special handler in the parent component
-      onSuccess();
+      onSuccess(); // Triggers a data refresh in the parent
       handleClose();
     } catch (err) {
-      console.error("Failed to save facility:", err);
+      console.error("Failed to update facility:", err);
       setError(`Error: ${err.message}. Please try again.`);
     } finally {
       setIsSaving(false);
     }
   };
 
-  const isFormValid = facilityName.trim() !== "" && imageFiles.length > 0;
+  const isFormValid = facilityName.trim() !== "";
 
   return (
     <Transition appear show={isOpen} as={Fragment}>
@@ -84,6 +113,7 @@ export default function AddFacilityModal({ isOpen, onClose, onSuccess }) {
         className="relative z-50 font-sans"
         onClose={handleClose}
       >
+        {/* Same HeadlessUI structure as AddFacilityModal... */}
         <TransitionChild
           as={Fragment}
           enter="ease-out duration-300"
@@ -111,7 +141,7 @@ export default function AddFacilityModal({ isOpen, onClose, onSuccess }) {
                   as="h3"
                   className="flex justify-between items-center p-6 text-2xl font-semibold leading-6 text-neutral-900 border-b border-neutral-200"
                 >
-                  Add New Facility
+                  Edit Facility
                   <button
                     onClick={handleClose}
                     className="p-1 rounded-full text-neutral-400 hover:bg-neutral-100"
@@ -143,12 +173,33 @@ export default function AddFacilityModal({ isOpen, onClose, onSuccess }) {
                       selectedAmenities={amenities}
                       setSelectedAmenities={setAmenities}
                     />
-                    <ImageUploader
-                      label="Facility Image"
-                      files={imageFiles}
-                      setFiles={setImageFiles}
-                      maxFiles={1}
-                    />
+
+                    {/* Display existing image and provide option to replace */}
+                    <div>
+                      <span className="block text-sm font-medium text-gray-700 mb-2">
+                        Facility Image
+                      </span>
+                      {existingImageUrl && imageFiles.length === 0 && (
+                        <div className="mb-4">
+                          <p className="text-xs text-gray-500 mb-2">
+                            Current Image:
+                          </p>
+                          <img
+                            src={existingImageUrl}
+                            alt="Current facility"
+                            className="w-32 h-32 object-cover rounded-lg shadow-md"
+                          />
+                        </div>
+                      )}
+                      <ImageUploader
+                        label={
+                          existingImageUrl ? "Replace Image" : "Upload Image"
+                        }
+                        files={imageFiles}
+                        setFiles={setImageFiles}
+                        maxFiles={5}
+                      />
+                    </div>
                   </div>
                 </div>
                 <div className="p-6 bg-neutral-50 border-t border-neutral-200 space-y-3">
@@ -167,7 +218,7 @@ export default function AddFacilityModal({ isOpen, onClose, onSuccess }) {
                       {isSaving && (
                         <ArrowPathIcon className="w-4 h-4 mr-2 animate-spin" />
                       )}
-                      {isSaving ? "Saving..." : "Save Facility"}
+                      {isSaving ? "Saving..." : "Save Changes"}
                     </button>
                   </div>
                 </div>

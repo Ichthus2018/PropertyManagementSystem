@@ -181,9 +181,6 @@ export function usePropertyUnitData() {
       const { error } = await supabase.from("units").insert(unitsToSave);
       if (error) throw error;
 
-      // We don't need to manually invalidate SWR here if the calling component does it.
-      // But if not, you'd add: mutate({ table: 'units' });
-
       if (onSuccess) onSuccess();
       resetState();
     } catch (err) {

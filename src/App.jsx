@@ -30,7 +30,7 @@ function App() {
   }
 
   return (
-    <BrowserRouter basename="/">
+    <BrowserRouter basename="">
       {/* <BrowserRouter basename="/PropertyManagementSystem"> */}
       <Suspense fallback={<LoadingSpinner />}>
         <Routes>
