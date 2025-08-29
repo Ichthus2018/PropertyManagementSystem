@@ -2,33 +2,39 @@ name: Deploy to VPS
 
 on:
   push:
-    branches: [main] # deploy only when you push to main branch
+    branches:
+      - main # Change to staging if you want staging branch
 
 jobs:
-  build-and-deploy:
+  deploy:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
+      - name: Checkout code
+        uses: actions/checkout@v3
 
       - name: Install dependencies
-        run: npm ci
+        run: |
+          npm ci
 
       - name: Build project
-        run: npm run build
+        run: |
+          npm run build
 
       - name: Deploy to VPS
         uses: appleboy/scp-action@v0.1.7
         with:
-          host: ${{ secrets.VPS_HOST }}
-          username: deploy
+          host: your_server_ip
+          username: root
           key: ${{ secrets.VPS_SSH_KEY }}
-          port: 22
           source: "dist/*"
-          target: "/var/www/gaia-pms.com/dist"
+          target: "/var/www/gaia-pms.com"
+
+      - name: Restart Nginx
+        uses: appleboy/ssh-action@v0.1.7
+        with:
+          host: your_server_ip
+          username: root
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            sudo systemctl restart nginx
