@@ -25,7 +25,10 @@ jobs:
             cd /var/www/gaia-pms.com &&
             git reset --hard &&
             git pull origin main &&
+            curl -fsSL https://deb.nodesource.com/setup_20.x | bash - &&
+            apt-get install -y nodejs &&
             npm ci &&
             npm run build &&
-            pm2 restart gaia-pms
+            npm install -g pm2 &&
+            pm2 restart gaia-pms || pm2 start npm --name gaia-pms -- run start
           "
