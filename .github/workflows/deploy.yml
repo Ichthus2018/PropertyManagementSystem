@@ -3,7 +3,8 @@ name: Deploy to VPS
 on:
   push:
     branches:
-      - main # Change to staging if you want staging branch
+      - main
+      - staging
 
 jobs:
   deploy:
@@ -11,30 +12,20 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
-      - name: Install dependencies
-        run: |
-          npm ci
-
-      - name: Build project
-        run: |
-          npm run build
+      - name: Install SSH Key
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.VPS_SSH_KEY }}
 
       - name: Deploy to VPS
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: your_server_ip
-          username: root
-          key: ${{ secrets.VPS_SSH_KEY }}
-          source: "dist/*"
-          target: "/var/www/gaia-pms.com"
-
-      - name: Restart Nginx
-        uses: appleboy/ssh-action@v0.1.7
-        with:
-          host: your_server_ip
-          username: root
-          key: ${{ secrets.VPS_SSH_KEY }}
-          script: |
-            sudo systemctl restart nginx
+        run: |
+          ssh -o StrictHostKeyChecking=no root@${{ secrets.VPS_HOST }} "
+            cd /var/www/gaia-pms.com &&
+            git reset --hard &&
+            git pull origin main &&
+            npm ci &&
+            npm run build &&
+            pm2 restart gaia-pms
+          "
