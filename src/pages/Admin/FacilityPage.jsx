@@ -19,7 +19,7 @@ export default function FacilityPage() {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false); // 2. ADD state for edit modal
   const [facilityToEdit, setFacilityToEdit] = useState(null); //    and the selected facility
 
-  // Use the custom hook for all data management
+  // Use the custom hook for all data management (including search & pagination)
   const {
     data: facilities,
     totalCount,
