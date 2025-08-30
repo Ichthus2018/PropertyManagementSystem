@@ -1,34 +1,37 @@
-name: Deploy to VPS
+name: Build and Deploy to VPS
 
 on:
   push:
-    branches:
-      - main
-      - staging
+    branches: [main] # This runs only when you push to the 'main' branch
 
 jobs:
-  deploy:
+  build-and-deploy:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout code
+      # 1. Gets the code from your repository
+      - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Install SSH Key
-        uses: webfactory/ssh-agent@v0.9.0
+      # 2. Sets up the correct version of Node.js
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
-          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+          node-version: 20
 
-      - name: Deploy to VPS
+      # 3. Installs dependencies and builds the project into a 'dist' folder
+      - name: Install and Build
         run: |
-          ssh -o StrictHostKeyChecking=no root@${{ secrets.VPS_HOST }} "
-            cd /var/www/gaia-pms.com &&
-            git reset --hard &&
-            git pull origin main &&
-            curl -fsSL https://deb.nodesource.com/setup_20.x | bash - &&
-            apt-get install -y nodejs &&
-            npm ci &&
-            npm run build &&
-            npm install -g pm2 &&
-            pm2 restart gaia-pms || pm2 start npm --name gaia-pms -- run start
-          "
+          npm ci
+          npm run build
+
+      # 4. Securely copies the contents of the 'dist' folder to your VPS
+      - name: Deploy to VPS
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: deploy
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: 22
+          source: "dist/" # Copy the entire dist folder
+          target: "/var/www/gaia-pms.com"
+          strip_components: 1 # This removes the 'dist' folder itself, copying only its contents
