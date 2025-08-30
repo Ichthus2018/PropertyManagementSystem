@@ -34,4 +34,4 @@ jobs:
           port: 22
           source: "dist/" # Copy the entire dist folder
           target: "/var/www/gaia-pms.com"
-          strip_components: 1 # This removes the 'dist' folder itself, copying only its contents
+          strip_components: 1
