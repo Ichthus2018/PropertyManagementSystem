@@ -33,5 +33,5 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: 22
           source: "dist/" # Copy the entire dist folder
-          target: "/var/www/gaia-pms.com"
+          target: "/var/www/gaia-pms.com/dist"
           strip_components: 1
