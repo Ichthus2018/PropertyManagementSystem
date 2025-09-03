@@ -1,6 +1,4 @@
-// src/components/modals/UnitModal/EditUnitModal.jsx
-
-import { Fragment } from "react";
+import { Fragment, useState } from "react";
 import {
   Dialog,
   DialogPanel,
@@ -10,18 +8,30 @@ import {
 } from "@headlessui/react";
 import { XMarkIcon, BuildingOffice2Icon } from "@heroicons/react/24/outline";
 import { useUnitForm } from "../../../hooks/useUnitForm";
+import clsx from "clsx";
 
-// NO CHANGES ARE NEEDED IN THIS FILE.
-// It will now work correctly because the `useUnitForm` hook provides the `formData`
-// with `_id` fields as strings, which the <select> value prop expects.
+// Import components for the third tab
+import FacilitiesInput from "./FacilitiesInput";
+import UtilitiesInput from "./UtilitiesInput";
+import ImageUploader from "../../ui/ImageUploader";
 
 export default function EditUnitModal({ isOpen, onClose, onSuccess, unit }) {
   const { formData, isSaving, saveError, dropdownData, handlers, isLoading } =
     useUnitForm(unit);
 
+  // --- NEW: State to manage the active tab ---
+  const [activeTab, setActiveTab] = useState("details");
+
   const handleSaveAndClose = () => {
     handlers.handleSave(onSuccess);
   };
+
+  // --- NEW: Tab configuration for the unit form ---
+  const unitTabsConfig = [
+    { id: "details", name: "Unit Details" },
+    { id: "classification", name: "Classification" },
+    { id: "features", name: "Features & Media" },
+  ];
 
   return (
     <Transition appear show={isOpen} as={Fragment}>
@@ -72,128 +82,208 @@ export default function EditUnitModal({ isOpen, onClose, onSuccess, unit }) {
                   </div>
                 ) : (
                   <>
-                    <div className="mt-8 px-6">
-                      <div className="p-6 border border-neutral-200 rounded-lg bg-neutral-50 max-h-[70vh] overflow-y-auto custom-scrollbar">
-                        <h5 className="font-bold text-lg text-neutral-800 mb-4 flex items-center">
-                          <BuildingOffice2Icon className="h-5 w-5 mr-2 text-orange-600" />
-                          Unit Details
-                        </h5>
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                          <div>
-                            <label className="block text-sm font-medium text-neutral-700 mb-1">
-                              Unit Name
-                            </label>
-                            <input
-                              type="text"
-                              name="name"
-                              value={formData.name ?? ""}
-                              onChange={handlers.handleInputChange}
-                              className="w-full px-4 py-2 border border-neutral-300 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-orange-500"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-sm font-medium text-neutral-700 mb-1">
-                              Sqm
-                            </label>
-                            <input
-                              type="number"
-                              name="sqm"
-                              value={formData.sqm ?? 0}
-                              onChange={handlers.handleInputChange}
-                              className="w-full px-4 py-2 border border-neutral-300 rounded-md bg-gray-100 focus:outline-none focus:ring-2 focus:ring-orange-500"
-                              disabled
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-sm font-medium text-neutral-700 mb-1">
-                              Unit Type
-                            </label>
-                            <select
-                              name="unit_type_id"
-                              value={formData.unit_type_id ?? ""}
-                              onChange={handlers.handleInputChange}
-                              className="w-full px-4 py-2 border border-neutral-300 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-orange-500"
-                            >
-                              <option value="">-- Select --</option>
-                              {dropdownData.unitTypes.map((type) => (
-                                <option key={type.id} value={type.id}>
-                                  {type.unit_type}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-                          <div>
-                            <label className="block text-sm font-medium text-neutral-700 mb-1">
-                              Leasing Type
-                            </label>
-                            <select
-                              name="leasing_type_id"
-                              value={formData.leasing_type_id ?? ""}
-                              onChange={handlers.handleInputChange}
-                              className="w-full px-4 py-2 border border-neutral-300 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-orange-500"
-                            >
-                              <option value="">-- Select --</option>
-                              {dropdownData.leasingTypes.map((type) => (
-                                <option key={type.id} value={type.id}>
-                                  {type.leasing_type}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-                          <div>
-                            <label className="block text-sm font-medium text-neutral-700 mb-1">
-                              Unit Category
-                            </label>
-                            <select
-                              name="unit_category_id"
-                              value={formData.unit_category_id ?? ""}
-                              onChange={handlers.handleInputChange}
-                              className="w-full px-4 py-2 border border-neutral-300 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-orange-500"
-                            >
-                              <option value="">-- Select --</option>
-                              {dropdownData.unitCategories.map((cat) => (
-                                <option key={cat.id} value={cat.id}>
-                                  {cat.unit_category}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-                          <div>
-                            <label className="block text-sm font-medium text-neutral-700 mb-1">
-                              Category 2
-                            </label>
-                            <select
-                              name="unit_category_2_id"
-                              value={formData.unit_category_2_id ?? ""}
-                              onChange={handlers.handleInputChange}
-                              className="w-full px-4 py-2 border border-neutral-300 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-orange-500"
-                            >
-                              <option value="">-- Select --</option>
-                              {dropdownData.unitCategories2.map((cat) => (
-                                <option key={cat.id} value={cat.id}>
-                                  {cat.unit_category_2}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-                          <div>
-                            <label className="block text-sm font-medium text-neutral-700 mb-1">
-                              Category 3
-                            </label>
-                            <select
-                              name="unit_category_3_id"
-                              value={formData.unit_category_3_id ?? ""}
-                              onChange={handlers.handleInputChange}
-                              className="w-full px-4 py-2 border border-neutral-300 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-orange-500"
-                            >
-                              <option value="">-- Select --</option>
-                              {dropdownData.unitCategories3.map((cat) => (
-                                <option key={cat.id} value={cat.id}>
-                                  {cat.unit_category_3}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
+                    <div className="mt-8 px-6 max-h-[70vh] overflow-y-auto custom-scrollbar">
+                      <div className="p-6 border border-neutral-200 rounded-lg bg-neutral-50 ">
+                        {/* --- NEW: Tab Navigation --- */}
+                        <div className="border-b border-gray-200 mb-6">
+                          <nav
+                            className="-mb-px flex space-x-4"
+                            aria-label="Tabs"
+                          >
+                            {unitTabsConfig.map((tab) => (
+                              <button
+                                key={tab.id}
+                                onClick={() => setActiveTab(tab.id)}
+                                className={clsx(
+                                  "whitespace-nowrap border-b-2 py-2 px-3 text-sm font-medium transition-colors duration-200 rounded-t-md",
+                                  activeTab === tab.id
+                                    ? "border-orange-500 text-orange-600 bg-orange-50"
+                                    : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+                                )}
+                              >
+                                {tab.name}
+                              </button>
+                            ))}
+                          </nav>
+                        </div>
+
+                        {/* --- NEW: Conditional Tab Content --- */}
+                        <div className="mt-4">
+                          {/* TAB 1: Unit Details */}
+                          {activeTab === "details" && (
+                            <div className="animate-fadeIn">
+                              <h5 className="font-bold text-lg text-neutral-800 mb-4 flex items-center">
+                                <BuildingOffice2Icon className="h-5 w-5 mr-2 text-orange-600" />
+                                Core Information
+                              </h5>
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                  <label className="block text-sm font-medium text-neutral-700 mb-1">
+                                    Unit Name
+                                  </label>
+                                  <input
+                                    type="text"
+                                    name="name"
+                                    value={formData.name ?? ""}
+                                    onChange={handlers.handleInputChange}
+                                    className="w-full px-4 py-2 border border-neutral-300 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block text-sm font-medium text-neutral-700 mb-1">
+                                    Sqm
+                                  </label>
+                                  <input
+                                    type="number"
+                                    name="sqm"
+                                    value={formData.sqm ?? 0}
+                                    onChange={handlers.handleInputChange}
+                                    className="w-full px-4 py-2 border border-neutral-300 rounded-md bg-gray-100 cursor-not-allowed"
+                                    disabled
+                                  />
+                                </div>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* TAB 2: Classification */}
+                          {activeTab === "classification" && (
+                            <div className="animate-fadeIn">
+                              <h5 className="font-bold text-lg text-neutral-800 mb-4 flex items-center">
+                                <BuildingOffice2Icon className="h-5 w-5 mr-2 text-orange-600" />
+                                Unit Classification
+                              </h5>
+                              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                <div>
+                                  <label className="block text-sm font-medium text-neutral-700 mb-1">
+                                    Unit Type
+                                  </label>
+                                  <select
+                                    name="unit_type_id"
+                                    value={formData.unit_type_id ?? ""}
+                                    onChange={handlers.handleInputChange}
+                                    className="w-full px-4 py-2 border border-neutral-300 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+                                  >
+                                    <option value="">-- Select --</option>
+                                    {dropdownData.unitTypes.map((type) => (
+                                      <option key={type.id} value={type.id}>
+                                        {type.unit_type}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
+                                <div>
+                                  <label className="block text-sm font-medium text-neutral-700 mb-1">
+                                    Leasing Type
+                                  </label>
+                                  <select
+                                    name="leasing_type_id"
+                                    value={formData.leasing_type_id ?? ""}
+                                    onChange={handlers.handleInputChange}
+                                    className="w-full px-4 py-2 border border-neutral-300 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+                                  >
+                                    <option value="">-- Select --</option>
+                                    {dropdownData.leasingTypes.map((type) => (
+                                      <option key={type.id} value={type.id}>
+                                        {type.leasing_type}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
+                                <div>
+                                  <label className="block text-sm font-medium text-neutral-700 mb-1">
+                                    Unit Category
+                                  </label>
+                                  <select
+                                    name="unit_category_id"
+                                    value={formData.unit_category_id ?? ""}
+                                    onChange={handlers.handleInputChange}
+                                    className="w-full px-4 py-2 border border-neutral-300 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+                                  >
+                                    <option value="">-- Select --</option>
+                                    {dropdownData.unitCategories.map((cat) => (
+                                      <option key={cat.id} value={cat.id}>
+                                        {cat.unit_category}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
+                                <div>
+                                  <label className="block text-sm font-medium text-neutral-700 mb-1">
+                                    Category 2
+                                  </label>
+                                  <select
+                                    name="unit_category_2_id"
+                                    value={formData.unit_category_2_id ?? ""}
+                                    onChange={handlers.handleInputChange}
+                                    className="w-full px-4 py-2 border border-neutral-300 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+                                  >
+                                    <option value="">-- Select --</option>
+                                    {dropdownData.unitCategories2.map((cat) => (
+                                      <option key={cat.id} value={cat.id}>
+                                        {cat.unit_category_2}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
+                                <div>
+                                  <label className="block text-sm font-medium text-neutral-700 mb-1">
+                                    Category 3
+                                  </label>
+                                  <select
+                                    name="unit_category_3_id"
+                                    value={formData.unit_category_3_id ?? ""}
+                                    onChange={handlers.handleInputChange}
+                                    className="w-full px-4 py-2 border border-neutral-300 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+                                  >
+                                    <option value="">-- Select --</option>
+                                    {dropdownData.unitCategories3.map((cat) => (
+                                      <option key={cat.id} value={cat.id}>
+                                        {cat.unit_category_3}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* TAB 3: Features & Media */}
+                          {activeTab === "features" && (
+                            <div className="space-y-6 animate-fadeIn">
+                              <FacilitiesInput
+                                selectedFacilities={formData.facilities || []}
+                                setSelectedFacilities={(facilities) =>
+                                  handlers.handleFieldChange(
+                                    "facilities",
+                                    facilities
+                                  )
+                                }
+                              />
+                              <div className="border-t border-neutral-200" />
+                              <UtilitiesInput
+                                selectedUtilities={formData.utilities || []}
+                                setSelectedUtilities={(utilities) =>
+                                  handlers.handleFieldChange(
+                                    "utilities",
+                                    utilities
+                                  )
+                                }
+                              />
+                              <div className="border-t border-neutral-200" />
+                              <ImageUploader
+                                label="Unit Images"
+                                files={formData.unit_images || []}
+                                setFiles={(files) =>
+                                  handlers.handleFieldChange(
+                                    "unit_images",
+                                    files
+                                  )
+                                }
+                                maxFiles={5}
+                              />
+                            </div>
+                          )}
                         </div>
                       </div>
                     </div>

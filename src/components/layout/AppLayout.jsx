@@ -26,10 +26,13 @@ import LogoutModal from "./LogoutModal";
 import PopoverMenuItem from "../ui/PopoverMenuItem";
 
 // Nav Item Component - STYLES UPDATED FOR NEW THEME
-const NavItem = ({ to, icon, label, sidebarOpen }) => (
+const NavItem = ({ to, icon, label, sidebarOpen, closeSidebar }) => (
   <li>
     <NavLink
       to={to}
+      onClick={() => {
+        if (window.innerWidth < 768) closeSidebar(); // Close only on mobile
+      }}
       className={({ isActive }) =>
         `flex items-center px-4 py-3 transition-all duration-300 rounded-lg group ${
           isActive
@@ -38,7 +41,6 @@ const NavItem = ({ to, icon, label, sidebarOpen }) => (
         }`
       }
     >
-      {/* Icon color changes on active state via group-hover or direct class */}
       <div className="group-hover:text-gray-800">{icon}</div>
       {sidebarOpen && <span className="ml-3 whitespace-nowrap">{label}</span>}
     </NavLink>
@@ -130,20 +132,22 @@ export default function AppLayout({ children }) {
               icon={<FaHotel size={20} />}
               label="Properties"
               sidebarOpen={sidebarOpen}
+              closeSidebar={() => setSidebarOpen(false)}
             />
             <NavItem
               to="/units"
               icon={<FaHotel size={20} />}
               label="Units"
               sidebarOpen={sidebarOpen}
+              closeSidebar={() => setSidebarOpen(false)}
             />
-
             {isAdmin && (
               <NavItem
                 to="/users"
                 icon={<FaUsers size={20} />}
                 label="Users"
                 sidebarOpen={sidebarOpen}
+                closeSidebar={() => setSidebarOpen(false)}
               />
             )}
           </ul>

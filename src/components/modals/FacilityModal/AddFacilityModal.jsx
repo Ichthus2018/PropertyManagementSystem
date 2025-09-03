@@ -147,7 +147,7 @@ export default function AddFacilityModal({ isOpen, onClose, onSuccess }) {
                       label="Facility Image"
                       files={imageFiles}
                       setFiles={setImageFiles}
-                      maxFiles={1}
+                      maxFiles={5}
                     />
                   </div>
                 </div>

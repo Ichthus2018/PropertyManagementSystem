@@ -25,6 +25,7 @@ jobs:
           npm run build
 
       # 4. Securely copies the contents of the 'dist' folder to your VPS
+      # Make sure to set the VPS_HOST (ssh root@5.181.217.187) and SSH_PRIVATE_KEY(cat ~/.ssh/id_ed25519) secrets in your GitHub repository settings
       - name: Deploy to VPS
         uses: appleboy/scp-action@v0.1.7
         with:

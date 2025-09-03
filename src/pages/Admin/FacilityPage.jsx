@@ -37,9 +37,9 @@ export default function FacilityPage() {
     clearSearch,
   } = useSupabaseQuery({
     tableName: "facilities",
-    selectQuery: `id, name, image_url, created_at`,
+    selectQuery: `id, name, image_url, created_at, amenities`, // <--- Add amenities here
     searchColumn: "name",
-    initialPageSize: 5, // Display 5 facilities per page
+    initialPageSize: 5,
   });
 
   const handlePageClick = (event) => {
@@ -198,7 +198,7 @@ export default function FacilityPage() {
         onSuccess={handleAddSuccess}
       />
       {facilityToEdit && (
-        <EditFacilityModals
+        <EditFacilityModal
           isOpen={isEditModalOpen}
           onClose={handleCloseEditModal}
           onSuccess={handleEditSuccess}

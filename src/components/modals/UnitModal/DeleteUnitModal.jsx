@@ -1,3 +1,5 @@
+// src/components/modals/UnitModal/DeleteUnitModal.jsx
+
 import { Fragment } from "react";
 import {
   Dialog,
@@ -7,6 +9,7 @@ import {
   TransitionChild,
 } from "@headlessui/react";
 import { ExclamationTriangleIcon } from "@heroicons/react/24/outline";
+import LoadingSpinner from "../../ui/LoadingSpinner";
 
 const DeleteUnitModal = ({
   isOpen,
@@ -27,7 +30,7 @@ const DeleteUnitModal = ({
           leaveFrom="opacity-100"
           leaveTo="opacity-0"
         >
-          <div className="fixed inset-0 bg-black/60" />
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" />
         </TransitionChild>
         <div className="fixed inset-0 overflow-y-auto">
           <div className="flex min-h-full items-center justify-center p-4 text-center">
@@ -69,15 +72,23 @@ const DeleteUnitModal = ({
                     type="button"
                     disabled={isDeleting}
                     onClick={onConfirm}
-                    className="inline-flex w-full justify-center rounded-md bg-red-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-red-500 disabled:bg-red-300 sm:ml-3 sm:w-auto"
+                    className="inline-flex items-center w-full justify-center rounded-md bg-red-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-red-500 disabled:bg-red-300 sm:ml-3 sm:w-auto"
                   >
-                    {isDeleting ? "Deleting..." : "Delete"}
+                    {/* 2. Add the spinner component inside the button when isDeleting is true */}
+                    {isDeleting ? (
+                      <>
+                        <LoadingSpinner className="h-4 w-4 mr-2" />
+                        Deleting...
+                      </>
+                    ) : (
+                      "Delete"
+                    )}
                   </button>
                   <button
                     type="button"
                     onClick={onClose}
                     disabled={isDeleting}
-                    className="mt-3 inline-flex w-full justify-center rounded-md bg-white px-3 py-2 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50 sm:mt-0 sm:w-auto"
+                    className="mt-3 inline-flex w-full justify-center rounded-md bg-white px-3 py-2 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50 disabled:opacity-60 sm:mt-0 sm:w-auto"
                   >
                     Cancel
                   </button>

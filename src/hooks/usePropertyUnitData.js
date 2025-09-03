@@ -3,8 +3,8 @@ import { useState, useEffect, useMemo } from "react";
 import useSWR from "swr";
 import supabase from "../lib/supabase";
 
-const fetcher = async ({ table }) => {
-  const { data, error } = await supabase.from(table).select("*");
+const fetcher = async ({ table, columns = "*" }) => {
+  const { data, error } = await supabase.from(table).select(columns); // Use the columns parameter
   if (error) throw new Error(error.message);
   return data;
 };
@@ -13,7 +13,6 @@ const fetcher = async ({ table }) => {
 const getInitialFormData = () => ({
   id: null,
   property_name: "",
-  // These will be set to AVAILABLE amounts, not totals
   number_of_units: 0,
   total_sqm: 0,
   units: [],
@@ -27,7 +26,7 @@ export function usePropertyUnitData() {
   );
   // Key change: We need all units to calculate usage. SWR will cache this.
   const { data: allUnits, isLoading: isUnitsLoading } = useSWR(
-    { table: "units" },
+    { table: "units", columns: "property_id, sqm" }, // <-- CHANGE THIS LINE
     fetcher
   );
 
@@ -152,6 +151,12 @@ export function usePropertyUnitData() {
     setFormData((prev) => ({ ...prev, units: newUnits }));
   };
 
+  const handleUnitFieldUpdate = (index, fieldName, value) => {
+    const newUnits = [...formData.units];
+    newUnits[index] = { ...newUnits[index], [fieldName]: value };
+    setFormData((prev) => ({ ...prev, units: newUnits }));
+  };
+
   const resetState = () => {
     setSelectedPropertyId(null);
     setFormData(getInitialFormData());
@@ -160,24 +165,81 @@ export function usePropertyUnitData() {
   const handleSave = async (onSuccess) => {
     setIsSaving(true);
     setSaveError(null);
+
     try {
       const {
         data: { user },
       } = await supabase.auth.getUser();
       if (!user) throw new Error("You must be logged in to save units.");
 
-      const unitsToSave = formData.units.map((unit) => ({
-        name: unit.name,
-        sqm: unit.sqm || 0,
-        property_id: formData.id,
-        user_id: user.id,
-        unit_type_id: unit.unit_type_id || null,
-        leasing_type_id: unit.leasing_type_id || null,
-        unit_category_id: unit.unit_category_id || null,
-        unit_category_2_id: unit.unit_category_2_id || null,
-        unit_category_3_id: unit.unit_category_3_id || null,
-      }));
+      // This is the main change. We use Promise.all to handle all the async uploads
+      // before we try to insert the data into the database.
+      const unitsToSave = await Promise.all(
+        formData.units.map(async (unit, unitIndex) => {
+          const imageUrls = [];
 
+          // Check if there are any images to upload
+          if (unit.unit_images && unit.unit_images.length > 0) {
+            // Loop through each file object using .entries() to get its index
+            for (const [imageIndex, imageFile] of unit.unit_images.entries()) {
+              if (
+                imageFile.source === "new" &&
+                imageFile.file instanceof File
+              ) {
+                const file = imageFile.file;
+                const fileExt = file.name.split(".").pop();
+                const propertyId = formData.id;
+                const timestamp = Date.now();
+
+                // 1. Create a unique, non-random filename using the propertyId
+                const fileName = `${propertyId}-unit${unitIndex}-img${imageIndex}-${timestamp}.${fileExt}`;
+                const filePath = `${user.id}/${propertyId}/${fileName}`;
+
+                // 2. Upload the file to Supabase Storage
+                const { error: uploadError } = await supabase.storage
+                  .from("unit-images") // <-- IMPORTANT: Replace with your actual bucket name!
+                  .upload(filePath, file);
+
+                if (uploadError) {
+                  console.error("Error uploading image:", uploadError);
+                  // Decide how to handle a failed upload. Here we'll just skip it.
+                  continue;
+                }
+
+                // 3. Get the public URL for the uploaded file
+                const { data: urlData } = supabase.storage
+                  .from("unit-images") // <-- IMPORTANT: Replace with your actual bucket name!
+                  .getPublicUrl(filePath);
+
+                if (urlData.publicUrl) {
+                  imageUrls.push(urlData.publicUrl);
+                }
+              } else if (imageFile.source === "existing") {
+                // Logic for handling files that were already uploaded (if you add editing)
+                imageUrls.push(imageFile.preview); // Assuming preview holds the existing URL
+              }
+            }
+          }
+
+          // 4. Create the final object for the 'units' table
+          return {
+            name: unit.name,
+            sqm: unit.sqm || 0,
+            property_id: formData.id,
+            user_id: user.id,
+            unit_type_id: unit.unit_type_id || null,
+            leasing_type_id: unit.leasing_type_id || null,
+            unit_category_id: unit.unit_category_id || null,
+            unit_category_2_id: unit.unit_category_2_id || null,
+            unit_category_3_id: unit.unit_category_3_id || null,
+            facilities: unit.facilities || [],
+            utilities: unit.utilities || [],
+            unit_images: imageUrls,
+          };
+        })
+      );
+
+      // Now `unitsToSave` is an array of objects ready for the database
       const { error } = await supabase.from("units").insert(unitsToSave);
       if (error) throw error;
 
@@ -213,6 +275,7 @@ export function usePropertyUnitData() {
       handleUnitChange,
       handleSave,
       resetState,
+      handleUnitFieldUpdate,
     },
     // The loading state now depends on both fetches
     isLoading: isPropertiesLoading || isUnitsLoading,

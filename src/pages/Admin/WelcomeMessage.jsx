@@ -14,7 +14,7 @@ const HeroSection = () => {
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm"></div>
       <div className="relative z-10 mx-auto flex max-w-5xl flex-col items-center p-8 text-center text-white animate-fade-in-up">
         <div className="mb-6 rounded-full bg-white/10 px-4 py-1.5 text-sm font-semibold tracking-wide text-neutral-200 backdrop-blur-md">
-          The Future of Property Management 2
+          The Future of Property Management
         </div>
 
         {/* --- Main Heading --- */}
