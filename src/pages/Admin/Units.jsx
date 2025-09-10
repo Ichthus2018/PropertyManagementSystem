@@ -14,8 +14,6 @@ import UnitDetails from "../../components/modals/UnitModal/UnitDetails";
 const UnitCardGrid = lazy(() =>
   import("../../components/pages/units/UnitCardGrid")
 );
-
-// Lazy-load modals
 const UnitModal = lazy(() =>
   import("../../components/modals/UnitModal/UnitModal")
 );
